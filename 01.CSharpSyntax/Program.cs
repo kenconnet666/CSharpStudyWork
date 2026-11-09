@@ -1,4 +1,5 @@
 using CSharpSyntax;
+using CSharpSyntax.Exercises;
 using CSharpSyntax.Lessons;
 
 // 程序入口：C# 9 起支持"顶级语句"，不用再写 class Program { static void Main }，
@@ -22,6 +23,14 @@ Console.OutputEncoding = System.Text.Encoding.UTF8;
     ("async/await 与多线程", Lesson09Async.Run),
     ("异常、using 与资源释放、lock", Lesson10ExceptionsResources.Run),
     ("C# 12~14 新特性（.NET 10）", Lesson11NewFeatures.Run),
+
+    // 强化练习与扩展：每题都带题目、思路、答案和预期输出
+    ("练习 1：基础与类型系统", Exercise01BasicsTypes.Run),
+    ("练习 2：类与面向对象", Exercise02Classes.Run),
+    ("练习 3：泛型、集合、事件、闭包", Exercise03CollectionsEvents.Run),
+    ("练习 4：LINQ 与模式匹配", Exercise04LinqPatterns.Run),
+    ("练习 5：异步、超时、资源、线程安全", Exercise05AsyncResources.Run),
+    ("扩展篇：Modbus 协议热身（CRC、字节序、Span、Channel）", Exercise06ProtocolExtension.Run),
 ];
 
 // 用法：

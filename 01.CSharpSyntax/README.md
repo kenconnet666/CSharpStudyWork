@@ -56,6 +56,24 @@ dotnet run -- all       # 全部
 9. 写 `async Task<int> RetryAsync(Func<Task<int>> action, int times)`，失败重试，用 `CancellationToken` 支持取消。
 10. 写一个类实现 `IDisposable`，在 `Dispose` 中打印日志，分别用 `using` 块和 `using` 声明测试释放顺序。
 
+## 强化练习与扩展（第 12~17 项，带完整答案）
+
+`Exercises/` 目录下有 6 个文件，每道题的注释都按固定格式写：**题目 → 思路 → 答案代码 → 预期输出**。
+建议先只看【题目】，自己在纸上或新文件里写，再对照答案；预期输出已经全部运行核对过（只有"不保护的计数"这一项每次运行不同）。
+
+| 编号 | 文件 | 覆盖内容 | 对应课 |
+|---|---|---|---|
+| 12 | Exercise01BasicsTypes | 元组 + TryParse、record 相等性、Flags 位操作、大小端、byte 陷阱、进制转换 | 1、2 |
+| 13 | Exercise02Classes | `field` 属性、接口多态、索引器校验、`override` 与 `new`、组合优于继承 | 3、4 |
+| 14 | Exercise03CollectionsEvents | 有序环形缓冲区、泛型缓存、yield 惰性、事件退订、闭包陷阱、重试方法 | 5、6 |
+| 15 | Exercise04LinqPatterns | 分组求和、MaxBy、Chunk、延迟执行陷阱、列表模式解析 Modbus 帧、状态机 | 7、8 |
+| 16 | Exercise05AsyncResources | 带取消的重试、`WaitAsync` 超时、`await using`、`Interlocked`、并发字典 | 9、10 |
+| 17 | Exercise06ProtocolExtension | CRC16、Modbus RTU/TCP 请求帧构造与解析、float 字序、`Span`、`Channel` | 全部 |
+
+运行方式和课程一样：`dotnet run -- 12`，或在菜单里输入编号。
+
+第 17 项是通往下一个模块的热身：Socket、串口、Modbus TCP 里要用到的东西基本都在里面。
+
 ## 学完之后
 
 下一个模块：Socket 与 TCP（对应教程 `03-Socket课程`），再往后是串口、Modbus TCP、S7（Sharp7）、OPC。
