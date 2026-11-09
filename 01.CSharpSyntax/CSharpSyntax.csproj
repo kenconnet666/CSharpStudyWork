@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <LangVersion>14</LangVersion>
+        <!-- 开启可空引用类型：编译器会提示哪些引用可能为 null（Java 没有这个，JS 的 TS strictNullChecks 类似） -->
+        <Nullable>enable</Nullable>
+        <!-- 隐式 using：自动引入 System、System.Linq、System.Collections.Generic 等常用命名空间 -->
+        <ImplicitUsings>enable</ImplicitUsings>
+        <RootNamespace>CSharpSyntax</RootNamespace>
+    </PropertyGroup>
+
+</Project>

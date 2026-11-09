@@ -1,1 +1,3 @@
-<Solution />
+<Solution>
+  <Project Path="01.CSharpSyntax/CSharpSyntax.csproj" />
+</Solution>
