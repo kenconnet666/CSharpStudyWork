@@ -4,7 +4,7 @@
 @*
     第 3 课：值类型与引用类型。两个并排的演示，同样的三步操作（创建、赋值、修改），结果完全不同：
       struct：赋值是"复制一份"，两个变量各管各的
-      class ：赋值是"多一个指向同一个对象的引用"，改一个另一个跟着变
+      class ：赋值是"多一个指向同一个对象的引用"，画出箭头，改一个另一个跟着变
     "栈上的变量"与"堆上的对象"这样画是教学简化，不是真实内存布局。
 *@
 
@@ -15,64 +15,69 @@
             <H1>值类型 vs 引用类型</H1>
             <Paragraph>
                 <Code>int</Code>、<Code>double</Code>、<Code>struct</Code> 这类<strong>值类型</strong>，变量里直接装着数据，赋值就是复制一份。
-                <Code>class</Code>、数组、<Code>string</Code> 这类<strong>引用类型</strong>，变量里装的是"指向对象的地址"，赋值只是多了一个指向同一个对象的地址。
+                <Code>class</Code>、数组 这类<strong>引用类型</strong>，变量里装的是"指向对象的地址"，赋值只是多了一个指向同一个对象的地址。
             </Paragraph>
         </Prose>
+
+        <Narration Emoji="📄">
+            打个比方：<strong>值类型 = 复印一份文件</strong>，你在复印件上涂改，原件不受影响；
+            <strong>引用类型 = 给同一份在线文档发一个链接</strong>，谁通过链接修改，所有人看到的都变了。
+        </Narration>
 
         <Grid MinItemWidth="CssLength.Rem(22)" Gap="SpaceScale.Lg">
             @* ---------------- struct ---------------- *@
             <Card>
-                <Header><Strong>struct（值类型）</Strong></Header>
+                <Header><Strong>struct（值类型）：复印件</Strong></Header>
                 <ChildContent>
                     <Flex Direction="LayoutDirection.Column" Gap="SpaceScale.Md">
                         <Flex Gap="SpaceScale.Sm" Wrap="true">
-                            <Button Variant="ButtonVariant.Soft" Disabled="@structCopied" @onclick="CopyStruct">s2 = s1</Button>
-                            <Button Variant="ButtonVariant.Soft" Disabled="@(!structCopied)" @onclick="ChangeStruct">s2.X = 99</Button>
+                            <Button Variant="ButtonVariant.Soft" Icon="Lucide.Copy" Disabled="@structCopied" @onclick="CopyStruct">s2 = s1</Button>
+                            <Button Variant="ButtonVariant.Soft" Icon="Lucide.Pencil" Disabled="@(!structCopied)" @onclick="ChangeStruct">s2.X = 99</Button>
                             <Button Variant="ButtonVariant.Ghost" Tone="Tone.Neutral" @onclick="ResetStruct">重来</Button>
                         </Flex>
-                        <Flex Gap="SpaceScale.Md" Wrap="true">
-                            <Slot Name="s1" Data="@($"X = {s1X}")" />
+                        <Flex Gap="SpaceScale.Lg" Wrap="true" Align="ItemAlign.Center">
+                            <Slot Name="s1（原件）" Data="@($"X = {s1X}")" />
                             @if (structCopied)
                             {
-                                <Slot Name="s2" Data="@($"X = {s2X}")" Changed="@(s2X != s1X)" />
+                                <span aria-hidden="true">📄 ➜ 📄</span>
+                                <Slot Name="s2（复印件）" Data="@($"X = {s2X}")" Changed="@(s2X != s1X)" />
                             }
                         </Flex>
-                        <Paragraph Size="Size.Sm" Tone="TextTone.Muted">@StructNote</Paragraph>
+                        <Narration @key="@($"{structCopied}{s2X}")" Emoji="@StructNote.Emoji">@StructNote.Text</Narration>
                     </Flex>
                 </ChildContent>
             </Card>
 
             @* ---------------- class ---------------- *@
             <Card>
-                <Header><Strong>class（引用类型）</Strong></Header>
+                <Header><Strong>class（引用类型）：同一份在线文档</Strong></Header>
                 <ChildContent>
                     <Flex Direction="LayoutDirection.Column" Gap="SpaceScale.Md">
                         <Flex Gap="SpaceScale.Sm" Wrap="true">
-                            <Button Variant="ButtonVariant.Soft" Disabled="@classCopied" @onclick="CopyClass">c2 = c1</Button>
-                            <Button Variant="ButtonVariant.Soft" Disabled="@(!classCopied)" @onclick="ChangeClass">c2.X = 99</Button>
+                            <Button Variant="ButtonVariant.Soft" Icon="Lucide.Link" Disabled="@classCopied" @onclick="CopyClass">c2 = c1</Button>
+                            <Button Variant="ButtonVariant.Soft" Icon="Lucide.Pencil" Disabled="@(!classCopied)" @onclick="ChangeClass">c2.X = 99</Button>
                             <Button Variant="ButtonVariant.Ghost" Tone="Tone.Neutral" @onclick="ResetClass">重来</Button>
                         </Flex>
-                        <Flex Direction="LayoutDirection.Column" Gap="SpaceScale.Sm">
-                            <Small Tone="TextTone.Muted">栈：变量，里面是对象的地址</Small>
-                            <Flex Gap="SpaceScale.Md" Wrap="true">
-                                <Slot Name="c1" Data="→ 对象 #1" />
-                                @if (classCopied)
-                                {
-                                    <Slot Name="c2" Data="→ 对象 #1" />
-                                }
-                            </Flex>
-                            <Small Tone="TextTone.Muted">堆：对象本身，只有一个</Small>
-                            <Flex Gap="SpaceScale.Md" Wrap="true">
-                                <Slot Name="对象 #1" Data="@($"X = {objectX}")" Changed="@(objectX != 1)" />
-                            </Flex>
-                        </Flex>
-                        <Paragraph Size="Size.Sm" Tone="TextTone.Muted">@ClassNote</Paragraph>
+                        <RefDiagram SecondReference="classCopied" ObjectData="@($"X = {objectX}")" ObjectChanged="@(objectX != 1)" />
+                        <Narration @key="@($"{classCopied}{objectX}")" Emoji="@ClassNote.Emoji">@ClassNote.Text</Narration>
                     </Flex>
                 </ChildContent>
             </Card>
         </Grid>
 
-        <CodeBlock Code="@Code" Lang="csharp" Highlight="false" Copyable="false" Title="你刚才执行的代码" />
+        <CodeBlock Code="@Code" Lang="csharp" Title="你刚才执行的代码" />
+
+        <Flex Direction="LayoutDirection.Column" Gap="SpaceScale.Md">
+            <Quiz Question="执行完 c2.X = 99 之后，c1.X 是多少？"
+                  Options="@(new[] { "1", "99" })" Answer="1"
+                  Explain="c1 和 c2 是指向同一个对象的两个引用，通过 c2 改对象，c1 看到的当然也变了。" />
+            <Quiz Question="执行完 s2.X = 99 之后，s1.X 是多少？"
+                  Options="@(new[] { "1", "99" })" Answer="0"
+                  Explain="struct 赋值复制了一整份，s2 是独立的复印件，改它不影响 s1。" />
+            <Quiz Question="string 是引用类型。var b = a; b += “!”; 之后，a 会变吗？"
+                  Options="@(new[] { "会变", "不会变" })" Answer="1"
+                  Explain="string 不可变：b += “!” 不是修改原来的字符串，而是造了一个新字符串让 b 指向它，a 仍指向旧的。所以 string 虽然是引用类型，用起来像值类型。" />
+        </Flex>
 
         <Prose Measure="false">
             <H2>要记住的</H2>
@@ -98,7 +103,11 @@
 
     void ResetStruct() { structCopied = false; s2X = 0; log.RemoveAll(l => l.Contains("s2")); }
 
-    string StructNote => !structCopied ? "先点\"s2 = s1\"。" : s2X == 99 ? "s1 还是 1：s2 是独立的一份。" : "s2 是 s1 的一份拷贝，现在两份内容相同。";
+    (string Emoji, string Text) StructNote => !structCopied
+        ? ("👆", "先点\"s2 = s1\"，复印一份。")
+        : s2X == 99
+            ? ("✏️", "你在复印件上涂改，原件 s1 还是 1，一点没变。两个变量各管各的。")
+            : ("📄", "复印好了：s2 是 s1 的一份独立拷贝，现在内容相同。试着改 s2。");
 
     // ---- class ----
     int objectX = 1;
@@ -110,7 +119,11 @@
 
     void ResetClass() { classCopied = false; objectX = 1; log.RemoveAll(l => l.Contains("c2")); }
 
-    string ClassNote => !classCopied ? "先点\"c2 = c1\"。" : objectX == 99 ? "c1 和 c2 指向同一个对象，通过 c2 改，c1 看到的也变了。" : "c1 和 c2 现在指向同一个对象 #1。";
+    (string Emoji, string Text) ClassNote => !classCopied
+        ? ("👆", "先点\"c2 = c1\"：看看会多出什么。")
+        : objectX == 99
+            ? ("🔗", "你通过 c2 修改了对象，c1 顺着箭头看到的也变成了 99——它们指向的是同一个对象。")
+            : ("🔗", "注意：没有新对象出现！只是多了一根箭头，c1 和 c2 现在指向同一个对象 #1。");
 
     // ---- 代码记录 ----
     readonly List<string> log = [];

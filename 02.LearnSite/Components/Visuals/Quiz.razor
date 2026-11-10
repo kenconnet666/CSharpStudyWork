@@ -1,0 +1,58 @@
+@*
+    小测验：先猜，再看答案和原因。选完之后对的显示绿色、选错的显示红色，并给出解释；可以重新答。
+    "先自己猜一下"比直接看答案记得牢得多。
+*@
+@namespace LearnSite.Components.Visuals
+@inherits RuneComponent
+
+<div @attributes="Attrs.Merge(BoxLayer)">
+    <Strong>🤔 先猜一猜：@Question</Strong>
+    <Flex Gap="SpaceScale.Sm" Wrap="true">
+        @for (var i = 0; i < Options.Length; i++)
+        {
+            var index = i;
+            <Button @key="index" Variant="ButtonVariant.Outline" Tone="@ToneOf(index)" Disabled="@(picked is not null)" @onclick="() => picked = index">@Options[index]</Button>
+        }
+        @if (picked is not null)
+        {
+            <Button Variant="ButtonVariant.Ghost" Tone="Tone.Neutral" @onclick="() => picked = null">再答一次</Button>
+        }
+    </Flex>
+    @if (picked is not null)
+    {
+        <Narration @key="picked" Emoji="@(picked == Answer ? "🎉" : "🧐")">
+            <strong>@(picked == Answer ? "答对了！" : $"正确答案是：{Options[Answer]}。")</strong> @Explain
+        </Narration>
+    }
+</div>
+
+@code {
+    /// <summary>题目。</summary>
+    [Parameter] public string Question { get; set; } = "";
+
+    /// <summary>选项。</summary>
+    [Parameter] public string[] Options { get; set; } = [];
+
+    /// <summary>正确选项的下标。</summary>
+    [Parameter] public int Answer { get; set; }
+
+    /// <summary>答完以后显示的解释。</summary>
+    [Parameter] public string Explain { get; set; } = "";
+
+    int? picked;
+
+    // 选了之后：对的绿色，选错的红色，其余保持中性
+    Tone ToneOf(int index) => picked is null ? Tone.Accent : index == Answer ? Tone.Success : index == picked ? Tone.Danger : Tone.Neutral;
+
+    static readonly Attrs BoxLayer = new() { Sx = Box };
+
+    static Style Box => Css.Define(static () => new Style
+    {
+        Display = Display.Flex,
+        FlexDirection = FlexDirection.Column,
+        Gap = Space.Md,
+        Padding = Space.Lg,
+        BorderRadius = Radii.Lg,
+        BackgroundColor = Colors.SurfaceMuted,
+    });
+}

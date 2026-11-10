@@ -1,6 +1,8 @@
 @*
     一排字节：每格显示两位十六进制，下面是它在内存里的地址（0、1、2……）。
-    大小端演示用它并排展示"同一个数在内存里的两种排法"；Tags 给每个字节加一个小标签（如 "高"、"低"）。
+    Ranks 按"重要程度"给每个字节上色：0 = 最高位字节（橙色），往后依次是蓝、绿、紫；同一个数无论大端小端，
+    高字节永远是同一个颜色，所以并排看两种排法时，一眼就能看出"字节换了位置"。
+    Tags 给每个字节加一个小标签（如 "高字节"）。
 *@
 @namespace LearnSite.Components.Visuals
 @inherits RuneComponent
@@ -13,10 +15,11 @@
     @for (var i = 0; i < Bytes.Length; i++)
     {
         var index = i;
-        <div @key="index" @attributes="Attrs.Merge(CellLayer)">
+        var rank = Ranks is not null && index < Ranks.Length ? Math.Clamp(Ranks[index], 0, 3) : 3;
+        <div @key="@((index, Bytes[index]))" @attributes="Attrs.Merge(CellLayers[rank])">
             <span @attributes="Attrs.Merge(ValueLayer)">@Bytes[index].ToString("X2")</span>
             <span @attributes="Attrs.Merge(SmallLayer)">地址 @index</span>
-            @if (Tags is not null && index < Tags.Length)
+            @if (Tags is not null && index < Tags.Length && Tags[index].Length > 0)
             {
                 <span @attributes="Attrs.Merge(TagLayer)">@Tags[index]</span>
             }
@@ -34,9 +37,20 @@
     /// <summary>每个字节下面的小标签，按下标对应，可以比字节少。</summary>
     [Parameter] public string[]? Tags { get; set; }
 
+    /// <summary>每个字节的重要程度（0 = 最高位字节），决定颜色；不给则都用同一种颜色。</summary>
+    [Parameter] public int[]? Ranks { get; set; }
+
+    /// <summary>四种颜色的单元格样式，按重要程度 0~3 取用（橙、蓝、绿、紫）；WireDemo 等也用。</summary>
+    public static readonly Attrs[] CellLayers =
+    [
+        new() { Sx = Sx.Of(Cell, Orange) },
+        new() { Sx = Sx.Of(Cell, Blue) },
+        new() { Sx = Sx.Of(Cell, Green) },
+        new() { Sx = Sx.Of(Cell, Purple) },
+    ];
+
     static readonly Attrs RowLayer = new() { Sx = Row };
     static readonly Attrs LabelLayer = new() { Sx = LabelStyle };
-    static readonly Attrs CellLayer = new() { Sx = Cell };
     static readonly Attrs ValueLayer = new() { Sx = Value };
     static readonly Attrs SmallLayer = new() { Sx = Small };
     static readonly Attrs TagLayer = new() { Sx = Tag };
@@ -45,6 +59,7 @@
 
     static Style LabelStyle => Css.Define(static () => new Style { Width = CssLength.Rem(9), FontWeight = FontWeights.Semibold, Color = Colors.TextMuted });
 
+    // 新字节出现（或值变了）时弹一下
     static Style Cell => Css.Define(static () => new Style
     {
         Display = Display.Flex,
@@ -54,9 +69,24 @@
         Width = CssLength.Rem(4.5),
         Padding = Space.Sm,
         BorderRadius = Radii.Md,
-        BackgroundColor = Tones.Accent.Soft,
-        Color = Tones.Accent.Text,
+        Keyframes = Pop,
+        AnimationDuration = "0.3s",
+        AnimationTimingFunction = Easings.Enter,
     });
+
+    static Keyframes Pop => Css.Define(static () => new Keyframes
+    {
+        ["0%"] = new() { Transform = "scale(0.75)", Opacity = 0.3 },
+        ["100%"] = new() { Transform = "scale(1)", Opacity = 1 },
+    });
+
+    static Style Orange => Css.Define(static () => new Style { BackgroundColor = Tones.Warning.Soft, Color = Tones.Warning.Text });
+
+    static Style Blue => Css.Define(static () => new Style { BackgroundColor = Tones.Accent.Soft, Color = Tones.Accent.Text });
+
+    static Style Green => Css.Define(static () => new Style { BackgroundColor = Tones.Success.Soft, Color = Tones.Success.Text });
+
+    static Style Purple => Css.Define(static () => new Style { BackgroundColor = Tones.Info.Soft, Color = Tones.Info.Text });
 
     static Style Value => Css.Define(static () => new Style { FontFamily = Fonts.Mono, FontSize = CssLength.Rem(1.5), FontWeight = FontWeights.Semibold });
 

@@ -1,0 +1,212 @@
+@*
+    "发送方 → 线路 → 接收方"：点"发送"后字节一个一个飞过去，接收方按自己的字节序把收到的字节拼成数。
+    发送方、接收方的字节序可以分别选：一致就读对（✅），不一致就读错（❌，并告诉你读成了什么）。
+    颜色表示字节"真实的重要程度"：发送方按真实位置上色；接收方按"它以为的位置"上色——颜色对不上，就是读错的原因。
+*@
+@namespace LearnSite.Components.Visuals
+@implements IDisposable
+@inherits RuneComponent
+
+<div @attributes="Attrs.Merge(StageLayer)">
+    <div @attributes="Attrs.Merge(SideLayer)">
+        <Strong>📤 发送方（@(SenderBig ? "大端" : "小端")）</Strong>
+        <ByteCells Bytes="wire" Ranks="SenderRanks" />
+    </div>
+
+    <div @attributes="Attrs.Merge(WireLayer)">
+        <div @attributes="Attrs.Merge(TrackLayer)">
+            @if (flying >= 0)
+            {
+                <div @key="flying" @attributes="Attrs.Merge(FlyLayer)">
+                    <div @attributes="Attrs.Merge(ByteCells.CellLayers[Math.Clamp(SenderRanks[flying], 0, 3)])">
+                        <span @attributes="Attrs.Merge(FlyValue)">@wire[flying].ToString("X2")</span>
+                    </div>
+                </div>
+            }
+        </div>
+        <Small Tone="TextTone.Muted">线路（一次只能过一个字节）</Small>
+    </div>
+
+    <div @attributes="Attrs.Merge(SideLayer)">
+        <Strong>📥 接收方（@(ReceiverBig ? "大端" : "小端")）</Strong>
+        @if (received.Count == 0)
+        {
+            <Small Tone="TextTone.Muted">还没收到任何字节</Small>
+        }
+        else
+        {
+            <ByteCells Bytes="[.. received]" Ranks="ReceiverRanks" Tags="ArrivalTags" />
+        }
+    </div>
+</div>
+
+<div @attributes="Attrs.Merge(FooterLayer)">
+    <Button Icon="@(running ? Lucide.Loader : Lucide.Play)" Disabled="@running" @onclick="Send">@(received.Count == 0 ? "发送" : "再发一次")</Button>
+    @if (received.Count == wire.Length && wire.Length > 0)
+    {
+        var rebuilt = Rebuild();
+        <Narration @key="@($"{SenderBig}{ReceiverBig}{Value}")" Emoji="@(rebuilt == Value ? "✅" : "❌")">
+            @if (rebuilt == Value)
+            {
+                <span>接收方拼出 <Code>@("0x" + rebuilt.ToString("X" + Size * 2))</Code>，和发送的数一样。双方字节序一致，读对了。</span>
+            }
+            else
+            {
+                <span>接收方拼出 <Code>@("0x" + rebuilt.ToString("X" + Size * 2))</Code>（十进制 @rebuilt），发送的却是 <Code>@("0x" + Value.ToString("X" + Size * 2))</Code>（@Value）。
+                    字节一个都没丢，只是双方对"先到的是高位还是低位"理解不一致，就读成了另一个数。</span>
+            }
+        </Narration>
+    }
+</div>
+
+@code {
+    /// <summary>要发送的数。</summary>
+    [Parameter] public uint Value { get; set; }
+
+    /// <summary>字节数（2 或 4）。</summary>
+    [Parameter] public int Size { get; set; } = 2;
+
+    /// <summary>发送方是否按大端发（先发高位字节）。</summary>
+    [Parameter] public bool SenderBig { get; set; } = true;
+
+    /// <summary>接收方是否按大端读（先到的当高位字节）。</summary>
+    [Parameter] public bool ReceiverBig { get; set; } = true;
+
+    byte[] wire = [];
+    readonly List<byte> received = [];
+    int flying = -1;
+    bool running;
+    (uint, int, bool, bool) lastParameters;
+    CancellationTokenSource? cancellation;
+
+    // 参数一变就重来：停掉正在进行的发送，清空接收方
+    protected override void OnParametersSet()
+    {
+        var current = (Value, Size, SenderBig, ReceiverBig);
+        if (current == lastParameters && wire.Length > 0) return;
+        lastParameters = current;
+        Stop();
+        wire = new byte[Size];
+        if (SenderBig)
+        {
+            for (var i = 0; i < Size; i++) wire[i] = (byte)(Value >> 8 * (Size - 1 - i));
+        }
+        else
+        {
+            for (var i = 0; i < Size; i++) wire[i] = (byte)(Value >> 8 * i);
+        }
+
+        received.Clear();
+    }
+
+    // 发送方每个字节的真实重要程度：大端先发的是最高位，小端先发的是最低位
+    int[] SenderRanks => [.. Enumerable.Range(0, Size).Select(i => SenderBig ? i : Size - 1 - i)];
+
+    // 接收方"以为"的重要程度：按它自己的字节序，先到的是高位还是低位
+    int[] ReceiverRanks => [.. Enumerable.Range(0, received.Count).Select(i => ReceiverBig ? i : Size - 1 - i)];
+
+    string[] ArrivalTags => [.. Enumerable.Range(1, received.Count).Select(i => $"第 {i} 个到")];
+
+    // 接收方按自己的字节序拼出的数
+    uint Rebuild()
+    {
+        uint result = 0;
+        for (var i = 0; i < received.Count; i++)
+        {
+            var shift = ReceiverBig ? 8 * (Size - 1 - i) : 8 * i;
+            result |= (uint)received[i] << shift;
+        }
+
+        return result;
+    }
+
+    async Task Send()
+    {
+        Stop();
+        received.Clear();
+        cancellation = new CancellationTokenSource();
+        var token = cancellation.Token;
+        running = true;
+        try
+        {
+            for (var i = 0; i < wire.Length; i++)
+            {
+                flying = i;
+                StateHasChanged();
+                await Task.Delay(750, token);
+                received.Add(wire[i]);
+                flying = -1;
+                StateHasChanged();
+                await Task.Delay(250, token);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // 参数变了或页面离开：直接结束
+        }
+        finally
+        {
+            flying = -1;
+            running = false;
+        }
+    }
+
+    void Stop()
+    {
+        cancellation?.Cancel();
+        cancellation?.Dispose();
+        cancellation = null;
+        running = false;
+        flying = -1;
+    }
+
+    public void Dispose() => Stop();
+
+    static readonly Attrs StageLayer = new() { Sx = Stage };
+    static readonly Attrs SideLayer = new() { Sx = Side };
+    static readonly Attrs WireLayer = new() { Sx = WireStyle };
+    static readonly Attrs TrackLayer = new() { Sx = Track };
+    static readonly Attrs FlyLayer = new() { Sx = Fly };
+    static readonly Attrs FlyValue = new() { Sx = FlyValueStyle };
+    static readonly Attrs FooterLayer = new() { Sx = Footer };
+
+    static Style Stage => Css.Define(static () => new Style { Display = Display.Grid, GridTemplateColumns = "1fr 9rem 1fr", Gap = Space.Md, AlignItems = AlignItems.Start });
+
+    static Style Side => Css.Define(static () => new Style { Display = Display.Flex, FlexDirection = FlexDirection.Column, Gap = Space.Sm, Padding = Space.Md, BorderRadius = Radii.Lg, BackgroundColor = Colors.SurfaceMuted, MinHeight = CssLength.Rem(8) });
+
+    static Style WireStyle => Css.Define(static () => new Style { Display = Display.Flex, FlexDirection = FlexDirection.Column, AlignItems = AlignItems.Center, Gap = Space.Sm, PaddingBlockStart = CssLength.Rem(2.5) });
+
+    // 线路：一条横线，飞行中的字节沿着它从左滑到右
+    static Style Track => Css.Define(static () => new Style
+    {
+        Position = Position.Relative,
+        Width = CssLength.Percent(100),
+        Height = CssLength.Rem(3.5),
+        BackgroundImage = $"linear-gradient({Colors.Border}, {Colors.Border})",
+        BackgroundRepeat = "no-repeat",
+        BackgroundPosition = "0 50%",
+        BackgroundSize = "100% 2px",
+    });
+
+    static Style Fly => Css.Define(static () => new Style
+    {
+        Position = Position.Absolute,
+        InsetBlockStart = CssLength.Rem(0.25),
+        InsetInlineStart = 0,
+        Keyframes = FlyAcross,
+        AnimationDuration = "0.75s",
+        AnimationTimingFunction = "linear",
+        AnimationFillMode = "forwards",
+    });
+
+    static Keyframes FlyAcross => Css.Define(static () => new Keyframes
+    {
+        ["from"] = new() { Transform = "translateX(-1rem)", Opacity = 0.2 },
+        ["15%"] = new() { Opacity = 1 },
+        ["to"] = new() { Transform = "translateX(6rem)", Opacity = 1 },
+    });
+
+    static Style FlyValueStyle => Css.Define(static () => new Style { FontFamily = Fonts.Mono, FontSize = CssLength.Rem(1.25), FontWeight = FontWeights.Semibold, PaddingBlock = Space.Sm });
+
+    static Style Footer => Css.Define(static () => new Style { Display = Display.Flex, FlexDirection = FlexDirection.Column, Gap = Space.Md, AlignItems = AlignItems.Start });
+}

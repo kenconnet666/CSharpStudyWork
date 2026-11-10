@@ -4,8 +4,10 @@
 @inherits RuneComponent
 
 @*
-    第 2 课：大小端。输入一个数，看它在内存/线路上的两种排法，以及"用错字节序读"会读成什么。
-    字节都是 BinaryPrimitives 当场写出来的，和 01.CSharpSyntax 里练习 12 用的是同一个类。
+    第 2 课：大小端。
+      演示 1：输入一个数，看它在内存里的两种排法（同一个字节永远是同一个颜色，换位置一眼就能看出来）
+      演示 2：发送方 → 线路 → 接收方，字节一个个飞过去，双方字节序一致/不一致分别会怎样
+    字节都是 BinaryPrimitives / 位运算当场算出来的，和 01.CSharpSyntax 练习 12 用的是同一套方法。
 *@
 
 <Container Size="ContainerSize.Lg" Padding="SpaceScale.None">
@@ -15,12 +17,19 @@
             <H1>大小端：一个数，两种排法</H1>
             <Paragraph>
                 寄存器值 <Code>0x1234</Code> 有两个字节：高字节 <Code>12</Code>、低字节 <Code>34</Code>。通信时先发哪个，两边必须约定好，
-                这就是<strong>字节序</strong>。大端先发高字节（Modbus、西门子 S7 都是大端），小端先发低字节（x86 电脑内存是小端）。
+                这就是<strong>字节序</strong>。
             </Paragraph>
         </Prose>
 
+        <Narration Emoji="📅">
+            打个比方：同一个日期，中国人写 <strong>2026年11月10日</strong>（从大到小，像<strong>大端</strong>），
+            欧洲人写 <strong>10/11/2026</strong>（从小到大，像<strong>小端</strong>）。日期没变，写法不同，
+            读的人如果不知道对方的习惯，就会读错。Modbus、西门子 S7 用大端，x86 电脑的内存用小端。
+        </Narration>
+
+        @* ---------- 演示 1 ---------- *@
         <Card>
-            <Header><Strong>演示：输入一个数</Strong></Header>
+            <Header><Strong>演示 1：一个数，两种排法</Strong></Header>
             <ChildContent>
                 <Flex Direction="LayoutDirection.Column" Gap="SpaceScale.Lg">
                     <Flex Gap="SpaceScale.Md" Align="ItemAlign.End" Wrap="true">
@@ -40,31 +49,45 @@
                     </Flex>
 
                     <Flex Direction="LayoutDirection.Column" Gap="SpaceScale.Sm">
-                        <ByteCells Label="大端（先发高位）" Bytes="Big" Tags="BigTags" />
-                        <ByteCells Label="小端（先发低位）" Bytes="Little" Tags="LittleTags" />
+                        <ByteCells Label="大端（先放高位）" Bytes="Big" Ranks="BigRanks" Tags="BigTags" />
+                        <ByteCells Label="小端（先放低位）" Bytes="Little" Ranks="LittleRanks" Tags="LittleTags" />
                     </Flex>
 
-                    <CodeBlock Code="@Code" Lang="csharp" Highlight="false" Copyable="false" />
+                    <CodeBlock Code="@Code" Lang="csharp" Copyable="false" />
+                    <Narration @key="@($"{hex}{width}")" Emoji="🎨">
+                        看颜色：<strong>同一个字节在两行里颜色相同</strong>（橙色是最高位字节），只是位置反了。
+                        大端的内存读起来和我们写数字的顺序一致，小端则是倒过来的。
+                    </Narration>
                 </Flex>
             </ChildContent>
         </Card>
 
+        @* ---------- 演示 2 ---------- *@
         <Card>
-            <Header><Strong>读错会怎样</Strong></Header>
+            <Header><Strong>演示 2：发过去，读出来</Strong></Header>
             <ChildContent>
-                <Flex Direction="LayoutDirection.Column" Gap="SpaceScale.Md">
-                    <Paragraph>
-                        设备按<strong>大端</strong>发来 <Code>@BigHex</Code>，如果你按<strong>小端</strong>去读：
+                <Flex Direction="LayoutDirection.Column" Gap="SpaceScale.Lg">
+                    <Paragraph Tone="TextTone.Muted">
+                        发送方把上面输入的数（<Code>@("0x" + value.ToString(Format))</Code>）一个字节一个字节发出去，接收方按自己的习惯拼回来。分别选双方的字节序，点"发送"。
                     </Paragraph>
-                    <Grid MinItemWidth="CssLength.Rem(14)" Gap="SpaceScale.Sm">
-                        <Readout Title="按大端读（正确）" Value="@($"0x{value.ToString(Format)}  =  {value}")" />
-                        <Readout Title="按小端读（读错）" Value="@($"0x{wrong.ToString(Format)}  =  {wrong}")" />
-                    </Grid>
-                    <Alert Tone="@(value == wrong ? Tone.Info : Tone.Warning)">
-                        @(value == wrong
-                            ? "这个数的字节正好对称（或只有一个字节有值的位置对称），两种读法结果相同，换一个数试试。"
-                            : "同样的字节，读出来是完全不同的数。上位机里读到\"离谱的数值\"，第一个要怀疑的就是字节序。")
-                    </Alert>
+                    <Flex Gap="SpaceScale.Xl" Wrap="true">
+                        <Field Label="发送方">
+                            <ToggleGroup @bind-Value="sender" Required="true" aria-label="发送方字节序">
+                                <ToggleItem Value="big">大端</ToggleItem>
+                                <ToggleItem Value="little">小端</ToggleItem>
+                            </ToggleGroup>
+                        </Field>
+                        <Field Label="接收方">
+                            <ToggleGroup @bind-Value="receiver" Required="true" aria-label="接收方字节序">
+                                <ToggleItem Value="big">大端</ToggleItem>
+                                <ToggleItem Value="little">小端</ToggleItem>
+                            </ToggleGroup>
+                        </Field>
+                    </Flex>
+                    <WireDemo Value="value" Size="Size" SenderBig="@(sender == "big")" ReceiverBig="@(receiver == "big")" />
+                    <Quiz Question="设备按大端发来 00 0A，你按小端去读，会得到多少？"
+                          Options="@(new[] { "10", "2560", "0x0A", "257" })" Answer="1"
+                          Explain="按小端读，先到的 00 是低字节、后到的 0A 是高字节，拼出 0x0A00，十进制 2560，而不是 10。" />
                 </Flex>
             </ChildContent>
         </Card>
@@ -75,6 +98,7 @@
                 <li>字节序只影响<strong>多字节的数</strong>（ushort、uint、float……）；单个 byte 没有字节序问题。</li>
                 <li>Modbus 的寄存器、S7 的 INT/DINT/REAL 都是大端；<Code>BitConverter</Code> 用的是本机字节序（x86 为小端），直接拿它解析协议数据会读错。</li>
                 <li>写协议代码一律用 <Code>BinaryPrimitives</Code>，方法名里写明 <Code>BigEndian</Code> 或 <Code>LittleEndian</Code>，一眼就能核对。</li>
+                <li>读到"离谱的数值"，第一个要怀疑的就是字节序。</li>
             </ul>
         </Prose>
     </Flex>
@@ -83,6 +107,8 @@
 @code {
     string hex = "1234";
     string width = "16";
+    string sender = "big";
+    string receiver = "big";
     bool valid = true;
     uint value = 0x1234;
 
@@ -96,7 +122,10 @@
 
     byte[] Little { get; set; } = [0x34, 0x12];
 
-    uint wrong;
+    // 颜色：0 = 最高位字节。大端从高到低，小端反过来
+    int[] BigRanks => [.. Enumerable.Range(0, Size)];
+
+    int[] LittleRanks => [.. Enumerable.Range(0, Size).Reverse()];
 
     string[] BigTags => Size == 2 ? ["高字节", "低字节"] : ["最高字节", "", "", "最低字节"];
 
@@ -117,7 +146,7 @@
         Parse();
     }
 
-    // 输入或位宽变化时重新算：数值、两种排法、读错的值
+    // 输入或位宽变化时重新算：数值与两种排法
     void Parse()
     {
         valid = uint.TryParse(hex, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var parsed);
@@ -129,13 +158,11 @@
         {
             BinaryPrimitives.WriteUInt16BigEndian(Big, (ushort)value);
             BinaryPrimitives.WriteUInt16LittleEndian(Little, (ushort)value);
-            wrong = BinaryPrimitives.ReadUInt16LittleEndian(Big);
         }
         else
         {
             BinaryPrimitives.WriteUInt32BigEndian(Big, value);
             BinaryPrimitives.WriteUInt32LittleEndian(Little, value);
-            wrong = BinaryPrimitives.ReadUInt32LittleEndian(Big);
         }
     }
 }

@@ -1,0 +1,66 @@
+@*
+    "哪些位是 1，就把它们的权重加起来"：把亮着的位的权重排成一个加法算式，如 64 + 16 + 8 = 88。
+    让"二进制怎么变成十进制"从抽象的规则变成眼前的加法。
+*@
+@namespace LearnSite.Components.Visuals
+@inherits RuneComponent
+
+<div @attributes="Attrs.Merge(RowLayer)">
+    @if (OnBits.Length == 0)
+    {
+        <span @attributes="Attrs.Merge(HintLayer)">没有任何一位是 1，所以值是 0</span>
+    }
+    else
+    {
+        @for (var i = 0; i < OnBits.Length; i++)
+        {
+            var bit = OnBits[i];
+            @if (i > 0)
+            {
+                <span @key="@($"plus{bit}")" @attributes="Attrs.Merge(HintLayer)">+</span>
+            }
+            <span @key="bit" @attributes="Attrs.Merge(ChipLayer)">@(1 << bit)</span>
+        }
+        <span @attributes="Attrs.Merge(HintLayer)">=</span>
+        <span @attributes="Attrs.Merge(ResultLayer)">@Value</span>
+    }
+</div>
+
+@code {
+    /// <summary>当前的字节值。</summary>
+    [Parameter] public byte Value { get; set; }
+
+    // 从高位到低位，为 1 的位序号
+    int[] OnBits => [.. Enumerable.Range(0, 8).Reverse().Where(bit => (Value >> bit & 1) == 1)];
+
+    static readonly Attrs RowLayer = new() { Sx = Row };
+    static readonly Attrs HintLayer = new() { Sx = Hint };
+    static readonly Attrs ChipLayer = new() { Sx = Chip };
+    static readonly Attrs ResultLayer = new() { Sx = Result };
+
+    static Style Row => Css.Define(static () => new Style { Display = Display.Flex, AlignItems = AlignItems.Center, Gap = Space.Sm, FlexWrap = FlexWrap.Wrap });
+
+    static Style Hint => Css.Define(static () => new Style { Color = Colors.TextMuted });
+
+    // 新出现的权重"弹"进来
+    static Style Chip => Css.Define(static () => new Style
+    {
+        FontFamily = Fonts.Mono,
+        FontWeight = FontWeights.Semibold,
+        Padding = Space.Sm,
+        BorderRadius = Radii.Md,
+        BackgroundColor = Tones.Accent.Soft,
+        Color = Tones.Accent.Text,
+        Keyframes = Pop,
+        AnimationDuration = "0.28s",
+        AnimationTimingFunction = Easings.Enter,
+    });
+
+    static Keyframes Pop => Css.Define(static () => new Keyframes
+    {
+        ["0%"] = new() { Transform = "scale(0.6)", Opacity = 0 },
+        ["100%"] = new() { Transform = "scale(1)", Opacity = 1 },
+    });
+
+    static Style Result => Css.Define(static () => new Style { FontFamily = Fonts.Mono, FontWeight = FontWeights.Bold, FontSize = CssLength.Rem(1.5) });
+}

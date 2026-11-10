@@ -1,7 +1,9 @@
 @*
     一个字节的 8 个位：每格显示 0 或 1，下面是这一位的"权重"（2 的几次方）。
     可编辑时点一格翻转这一位；ReadOnly 时只显示（用来展示运算结果）。
-    这是后面"位与字节""大小端"等演示共用的小部件。
+    位变化时那一格会"弹"一下（用 @key 带上状态让元素重建，动画重新播放），一眼能看到哪些位变了。
+    Captions 给指定的位加一行小字（如 Flags 里的 "过热"）。
+    这是"位与字节""位运算""Flags"等演示共用的小部件。
 *@
 @namespace LearnSite.Components.Visuals
 @inherits RuneComponent
@@ -15,12 +17,18 @@
     {
         var index = bit;
         var on = (Value >> index & 1) == 1;
-        <button @key="index" type="button" disabled="@ReadOnly" aria-pressed="@on" aria-label="@($"第 {index} 位，当前 {(on ? 1 : 0)}")"
-                @attributes="Attrs.Merge(ReadOnly ? (on ? CellOnStatic : CellOffStatic) : (on ? CellOn : CellOff))"
-                @onclick="() => Toggle(index)">
-            <span>@(on ? 1 : 0)</span>
-            <span @attributes="Attrs.Merge(WeightLayer)">@(1 << index)</span>
-        </button>
+        <div @key="@((index, on))" @attributes="Attrs.Merge(ColumnLayer)">
+            <button type="button" disabled="@ReadOnly" aria-pressed="@on" aria-label="@($"第 {index} 位，当前 {(on ? 1 : 0)}")"
+                    @attributes="Attrs.Merge(ReadOnly ? (on ? CellOnStatic : CellOffStatic) : (on ? CellOn : CellOff))"
+                    @onclick="() => Toggle(index)">
+                <span>@(on ? 1 : 0)</span>
+                <span @attributes="Attrs.Merge(WeightLayer)">@(1 << index)</span>
+            </button>
+            @if (Captions is not null && Captions.TryGetValue(index, out var caption))
+            {
+                <span @attributes="Attrs.Merge(CaptionLayer)">@caption</span>
+            }
+        </div>
     }
 </div>
 
@@ -37,21 +45,29 @@
     /// <summary>行首的名字，如 "a"、"结果"。</summary>
     [Parameter] public string Label { get; set; } = "";
 
+    /// <summary>某些位下面的小字，键是位序号（0~7）。</summary>
+    [Parameter] public IReadOnlyDictionary<int, string>? Captions { get; set; }
+
     Task Toggle(int bit) => ValueChanged.InvokeAsync((byte)(Value ^ 1 << bit));
 
     // ---- 样式：静态定义一次，渲染时只挑选，不在渲染里新建（分析器 RUNE004/005 要求） ----
     static readonly Attrs RowLayer = new() { Sx = Row };
     static readonly Attrs LabelLayer = new() { Sx = LabelStyle };
+    static readonly Attrs ColumnLayer = new() { Sx = Column };
     static readonly Attrs WeightLayer = new() { Sx = Weight };
+    static readonly Attrs CaptionLayer = new() { Sx = Caption };
     static readonly Attrs CellOn = new() { Sx = Sx.Of(Cell, Interactive, On) };
     static readonly Attrs CellOff = new() { Sx = Sx.Of(Cell, Interactive, Off) };
     static readonly Attrs CellOnStatic = new() { Sx = Sx.Of(Cell, On) };
     static readonly Attrs CellOffStatic = new() { Sx = Sx.Of(Cell, Off) };
 
-    static Style Row => Css.Define(static () => new Style { Display = Display.Flex, AlignItems = AlignItems.Center, Gap = Space.Xs });
+    static Style Row => Css.Define(static () => new Style { Display = Display.Flex, AlignItems = AlignItems.Start, Gap = Space.Xs });
 
-    static Style LabelStyle => Css.Define(static () => new Style { Width = CssLength.Rem(4), FontWeight = FontWeights.Semibold, Color = Colors.TextMuted });
+    static Style LabelStyle => Css.Define(static () => new Style { Width = CssLength.Rem(4), FontWeight = FontWeights.Semibold, Color = Colors.TextMuted, PaddingBlockStart = CssLength.Rem(1) });
 
+    static Style Column => Css.Define(static () => new Style { Display = Display.Flex, FlexDirection = FlexDirection.Column, AlignItems = AlignItems.Center, Gap = Space.Xs });
+
+    // 位翻转时弹一下：从略小、略淡长到原样
     static Style Cell => Css.Define(static () => new Style
     {
         Display = Display.Flex,
@@ -64,6 +80,16 @@
         FontFamily = Fonts.Mono,
         FontSize = CssLength.Rem(1.25),
         Transition = $"background-color {Durations.Sm} {Easings.Standard}",
+        Keyframes = Pop,
+        AnimationDuration = "0.28s",
+        AnimationTimingFunction = Easings.Enter,
+    });
+
+    static Keyframes Pop => Css.Define(static () => new Keyframes
+    {
+        ["0%"] = new() { Transform = "scale(0.7)", Opacity = 0.4 },
+        ["60%"] = new() { Transform = "scale(1.08)", Opacity = 1 },
+        ["100%"] = new() { Transform = "scale(1)", Opacity = 1 },
     });
 
     static Style Interactive => Css.Define(static () => new Style { Cursor = Cursor.Pointer });
@@ -73,4 +99,6 @@
     static Style Off => Css.Define(static () => new Style { BackgroundColor = Colors.Fill, Color = Colors.TextMuted });
 
     static Style Weight => Css.Define(static () => new Style { FontSize = CssLength.Rem(0.7), Opacity = 0.7 });
+
+    static Style Caption => Css.Define(static () => new Style { FontSize = CssLength.Rem(0.75), Color = Colors.TextMuted });
 }

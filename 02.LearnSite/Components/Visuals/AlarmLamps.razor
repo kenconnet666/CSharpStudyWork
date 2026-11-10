@@ -1,0 +1,96 @@
+@*
+    设备面板上的 4 个报警灯：点一盏灯 = 打开/关闭这一个报警 = 状态字节里对应的那一位翻转。
+    让"一个字节存几个开关"变成一块看得见的指示灯面板：灯亮 = 这一位是 1。
+*@
+@namespace LearnSite.Components.Visuals
+@inherits RuneComponent
+
+<div @attributes="Attrs.Merge(PanelLayer)">
+    @foreach (var def in Defs)
+    {
+        var lit = Values.Contains(def.Name);
+        <button @key="@((def.Name, lit))" type="button" aria-pressed="@lit" @attributes="Attrs.Merge(LampAttrs(def.Bit, lit))" @onclick="() => Toggle(def.Name)">
+            <span @attributes="Attrs.Merge(lit ? EmojiOn : EmojiOff)" aria-hidden="true">@def.Emoji</span>
+            <strong>@def.Label</strong>
+            <span @attributes="Attrs.Merge(BitLayer)">@def.Name · 第 @def.Bit 位</span>
+            <span @attributes="Attrs.Merge(BitLayer)">@(lit ? "亮 = 1" : "灭 = 0")</span>
+        </button>
+    }
+</div>
+
+@code {
+    /// <summary>四个报警：枚举名、中文名、位序号、表情。</summary>
+    public static readonly (string Name, string Label, int Bit, string Emoji)[] Defs =
+    [
+        ("Overheat", "过热", 0, "🔥"),
+        ("Overload", "过载", 1, "⚙️"),
+        ("Offline", "离线", 2, "📡"),
+        ("LowPressure", "低压", 3, "💧"),
+    ];
+
+    /// <summary>当前亮着的灯（枚举名）。</summary>
+    [Parameter] public IReadOnlyList<string> Values { get; set; } = [];
+
+    [Parameter] public EventCallback<IReadOnlyList<string>> ValuesChanged { get; set; }
+
+    Task Toggle(string name) =>
+        ValuesChanged.InvokeAsync(Values.Contains(name) ? [.. Values.Where(v => v != name)] : [.. Values, name]);
+
+    // 每盏灯一种亮色：第 0~3 位依次是危险、警告、强调、信息
+    static Attrs LampAttrs(int bit, bool lit) => lit ? LitLamps[bit] : OffLamp;
+
+    static readonly Attrs OffLamp = new() { Sx = Sx.Of(Lamp, Off) };
+    static readonly Attrs[] LitLamps =
+    [
+        new() { Sx = Sx.Of(Lamp, LitDanger) },
+        new() { Sx = Sx.Of(Lamp, LitWarning) },
+        new() { Sx = Sx.Of(Lamp, LitAccent) },
+        new() { Sx = Sx.Of(Lamp, LitInfo) },
+    ];
+
+    static readonly Attrs PanelLayer = new() { Sx = Panel };
+    static readonly Attrs EmojiOn = new() { Sx = EmojiLit };
+    static readonly Attrs EmojiOff = new() { Sx = EmojiDim };
+    static readonly Attrs BitLayer = new() { Sx = BitStyle };
+
+    static Style Panel => Css.Define(static () => new Style { Display = Display.Grid, GridTemplateColumns = "repeat(auto-fit, minmax(8.5rem, 1fr))", Gap = Space.Md });
+
+    static Style Lamp => Css.Define(static () => new Style
+    {
+        Display = Display.Flex,
+        FlexDirection = FlexDirection.Column,
+        AlignItems = AlignItems.Center,
+        Gap = Space.Xs,
+        Padding = Space.Md,
+        BorderRadius = Radii.Lg,
+        Cursor = Cursor.Pointer,
+        Transition = $"background-color {Durations.Md} {Easings.Standard}, box-shadow {Durations.Md} {Easings.Standard}",
+        Keyframes = Pop,
+        AnimationDuration = "0.28s",
+        AnimationTimingFunction = Easings.Enter,
+    });
+
+    static Keyframes Pop => Css.Define(static () => new Keyframes
+    {
+        ["0%"] = new() { Transform = "scale(0.92)" },
+        ["60%"] = new() { Transform = "scale(1.04)" },
+        ["100%"] = new() { Transform = "scale(1)" },
+    });
+
+    static Style Off => Css.Define(static () => new Style { BackgroundColor = Colors.Fill, Color = Colors.TextMuted });
+
+    static Style LitDanger => Css.Define(static () => new Style { BackgroundColor = Tones.Danger.Soft, Color = Tones.Danger.Text, BoxShadow = $"0 0 18px {Tones.Danger.Solid}" });
+
+    static Style LitWarning => Css.Define(static () => new Style { BackgroundColor = Tones.Warning.Soft, Color = Tones.Warning.Text, BoxShadow = $"0 0 18px {Tones.Warning.Solid}" });
+
+    static Style LitAccent => Css.Define(static () => new Style { BackgroundColor = Tones.Accent.Soft, Color = Tones.Accent.Text, BoxShadow = $"0 0 18px {Tones.Accent.Solid}" });
+
+    static Style LitInfo => Css.Define(static () => new Style { BackgroundColor = Tones.Info.Soft, Color = Tones.Info.Text, BoxShadow = $"0 0 18px {Tones.Info.Solid}" });
+
+    static Style EmojiLit => Css.Define(static () => new Style { FontSize = CssLength.Rem(2) });
+
+    // 灭着的灯：灰色、半透明
+    static Style EmojiDim => Css.Define(static () => new Style { FontSize = CssLength.Rem(2), Filter = "grayscale(1)", Opacity = 0.45 });
+
+    static Style BitStyle => Css.Define(static () => new Style { FontSize = CssLength.Rem(0.75), FontFamily = Fonts.Mono, Opacity = 0.8 });
+}

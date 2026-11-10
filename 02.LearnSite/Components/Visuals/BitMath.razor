@@ -1,0 +1,140 @@
+@*
+    位运算的"竖式"：像小学做加法那样把位上下对齐，每一列下面写出这一列是怎么算出来的（如 1|0→1）。
+    - 二元运算（| & ^）：显示 a、b 两行，结果在下面，每列一个小算式
+    - 取反（~）：只有 a
+    - 移位（<< >>）：整体平移，下面告诉你"从边上掉出去了哪些位""补进来了哪些 0"
+    a、b 可以点位格修改，结果实时变化。
+*@
+@namespace LearnSite.Components.Visuals
+@inherits RuneComponent
+
+<div @attributes="Attrs.Merge(WrapLayer)">
+    <BitRow Label="a" Value="A" ValueChanged="AChanged" />
+    @if (Op is "or" or "and" or "xor")
+    {
+        <BitRow Label="@($"b  {Symbol}")" Value="B" ValueChanged="BChanged" />
+    }
+    else if (Op == "not")
+    {
+        <div @attributes="Attrs.Merge(OperatorLayer)">~  把每一位都翻过来</div>
+    }
+    <div @attributes="Attrs.Merge(RuleLayer)"></div>
+    <BitRow Label="结果" Value="Result" ReadOnly="true" />
+
+    @* 每一列的小算式，宽度与位格一一对齐 *@
+    <div @attributes="Attrs.Merge(NotesLayer)">
+        <span @attributes="Attrs.Merge(SpacerLayer)"></span>
+        @for (var bit = 7; bit >= 0; bit--)
+        {
+            <span @key="bit" @attributes="Attrs.Merge(NoteLayer)">@Note(bit)</span>
+        }
+    </div>
+
+    @if (Op is "shl" or "shr")
+    {
+        var dropped = Dropped();
+        <Narration @key="@($"{Op}{Shift}{A}")" Emoji="✂️">
+            @if (Op == "shl")
+            {
+                <span>整体向<strong>左</strong>平移 @Shift 位。左边掉出去的位：<Code>@dropped</Code>；右边补进来的位：<Code>@(new string('0', Shift))</Code>。</span>
+            }
+            else
+            {
+                <span>整体向<strong>右</strong>平移 @Shift 位。右边掉出去的位：<Code>@dropped</Code>；左边补进来的位：<Code>@(new string('0', Shift))</Code>。</span>
+            }
+            @if (dropped.Contains('1'))
+            {
+                <span> 掉出去的位里有 1，被<strong>挤掉了，信息丢了</strong>，所以结果不再等于 @(Op == "shl" ? "乘" : "除以") @(1 << Shift)。</span>
+            }
+            else
+            {
+                <span> 掉出去的全是 0，没有损失，所以刚好等于 @A @(Op == "shl" ? "×" : "÷") @(1 << Shift) = @Result。</span>
+            }
+        </Narration>
+    }
+</div>
+
+@code {
+    /// <summary>第一个操作数。</summary>
+    [Parameter] public byte A { get; set; }
+
+    [Parameter] public EventCallback<byte> AChanged { get; set; }
+
+    /// <summary>第二个操作数（| & ^ 用）。</summary>
+    [Parameter] public byte B { get; set; }
+
+    [Parameter] public EventCallback<byte> BChanged { get; set; }
+
+    /// <summary>运算：or、and、xor、not、shl、shr。</summary>
+    [Parameter] public string Op { get; set; } = "or";
+
+    /// <summary>移位的位数（shl、shr 用）。</summary>
+    [Parameter] public int Shift { get; set; } = 1;
+
+    /// <summary>运算结果（页面上的代码行也用它，保证两处一致）。</summary>
+    public static byte Compute(string op, byte a, byte b, int shift) => op switch
+    {
+        "or" => (byte)(a | b),
+        "and" => (byte)(a & b),
+        "xor" => (byte)(a ^ b),
+        "not" => (byte)~a,
+        "shl" => (byte)(a << shift),
+        "shr" => (byte)(a >> shift),
+        _ => 0,
+    };
+
+    byte Result => Compute(Op, A, B, Shift);
+
+    string Symbol => Op switch { "or" => "|", "and" => "&", "xor" => "^", _ => "" };
+
+    static int BitOf(byte value, int bit) => value >> bit & 1;
+
+    // 第 bit 列的小算式
+    string Note(int bit)
+    {
+        var result = BitOf(Result, bit);
+        return Op switch
+        {
+            "not" => $"~{BitOf(A, bit)}→{result}",
+            "shl" => bit - Shift >= 0 ? $"←{bit - Shift}" : "补0",
+            "shr" => bit + Shift <= 7 ? $"←{bit + Shift}" : "补0",
+            _ => $"{BitOf(A, bit)}{Symbol}{BitOf(B, bit)}→{result}",
+        };
+    }
+
+    // 掉出去的位，写成 "11" 这样的字符串（从高位到低位）
+    string Dropped()
+    {
+        var bits = Op == "shl"
+            ? Enumerable.Range(8 - Shift, Shift).Reverse()   // 最高的 Shift 位
+            : Enumerable.Range(0, Shift).Reverse();          // 最低的 Shift 位
+        return string.Concat(bits.Select(bit => BitOf(A, bit)));
+    }
+
+    static readonly Attrs WrapLayer = new() { Sx = Wrap };
+    static readonly Attrs OperatorLayer = new() { Sx = OperatorStyle };
+    static readonly Attrs RuleLayer = new() { Sx = Rule };
+    static readonly Attrs NotesLayer = new() { Sx = Notes };
+    static readonly Attrs SpacerLayer = new() { Sx = Spacer };
+    static readonly Attrs NoteLayer = new() { Sx = NoteStyle };
+
+    static Style Wrap => Css.Define(static () => new Style { Display = Display.Flex, FlexDirection = FlexDirection.Column, Gap = Space.Sm });
+
+    static Style OperatorStyle => Css.Define(static () => new Style { Color = Colors.TextMuted, PaddingInlineStart = CssLength.Rem(4.25), FontFamily = Fonts.Mono });
+
+    // 竖式中间的横线
+    static Style Rule => Css.Define(static () => new Style { Height = CssLength.Rem(0.125), BackgroundColor = Colors.Border, MarginInlineStart = CssLength.Rem(4.25) });
+
+    static Style Notes => Css.Define(static () => new Style { Display = Display.Flex, Gap = Space.Xs });
+
+    static Style Spacer => Css.Define(static () => new Style { Width = CssLength.Rem(4), FlexShrink = 0 });
+
+    static Style NoteStyle => Css.Define(static () => new Style
+    {
+        Width = CssLength.Rem(2.75),
+        TextAlign = TextAlign.Center,
+        FontFamily = Fonts.Mono,
+        FontSize = CssLength.Rem(0.65),
+        Color = Colors.TextMuted,
+    });
+}

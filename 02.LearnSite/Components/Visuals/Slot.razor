@@ -1,12 +1,13 @@
 @*
-    一个"盒子"：变量或对象，上面是名字，下面是里面装的内容。Changed 为 true 时用醒目的颜色，提示"这个值刚刚变了"。
+    一个"盒子"：变量或对象，上面是名字，下面是里面装的内容。
+    出现时弹一下；内容变化时数字会闪一下（@key 重建）；Changed 为 true 时换成醒目的颜色，提示"这个值刚刚变了"。
 *@
 @namespace LearnSite.Components.Visuals
 @inherits RuneComponent
 
 <div @attributes="Attrs.Merge(Changed ? ChangedLayer : NormalLayer)">
     <span @attributes="Attrs.Merge(NameLayer)">@Name</span>
-    <span @attributes="Attrs.Merge(DataLayer)">@Data</span>
+    <span @key="Data" @attributes="Attrs.Merge(DataLayer)">@Data</span>
 </div>
 
 @code {
@@ -33,6 +34,15 @@
         Padding = Space.Md,
         BorderRadius = Radii.Md,
         Transition = $"background-color {Durations.Md} {Easings.Standard}",
+        Keyframes = Pop,
+        AnimationDuration = "0.3s",
+        AnimationTimingFunction = Easings.Enter,
+    });
+
+    static Keyframes Pop => Css.Define(static () => new Keyframes
+    {
+        ["0%"] = new() { Transform = "scale(0.8)", Opacity = 0 },
+        ["100%"] = new() { Transform = "scale(1)", Opacity = 1 },
     });
 
     static Style Normal => Css.Define(static () => new Style { BackgroundColor = Colors.SurfaceMuted });
@@ -41,5 +51,19 @@
 
     static Style NameStyle => Css.Define(static () => new Style { FontSize = CssLength.Rem(0.75), Opacity = 0.7 });
 
-    static Style DataStyle => Css.Define(static () => new Style { FontFamily = Fonts.Mono, FontWeight = FontWeights.Semibold });
+    // 内容变了（元素重建）时，数字从略大、略淡落回原样
+    static Style DataStyle => Css.Define(static () => new Style
+    {
+        FontFamily = Fonts.Mono,
+        FontWeight = FontWeights.Semibold,
+        Keyframes = Flash,
+        AnimationDuration = "0.4s",
+        AnimationTimingFunction = Easings.Enter,
+    });
+
+    static Keyframes Flash => Css.Define(static () => new Keyframes
+    {
+        ["0%"] = new() { Transform = "scale(1.35)", Opacity = 0.3 },
+        ["100%"] = new() { Transform = "scale(1)", Opacity = 1 },
+    });
 }
