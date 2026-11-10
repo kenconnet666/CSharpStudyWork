@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+    <!--
+        C# 互动学习站：.NET MAUI（目前只做 Windows）+ Blazor Hybrid。
+        组件在本进程里运行，WebView2 只负责显示，所以以后做 Socket、串口的演示可以直接用真实的网络和串口。
+        界面用 RuneForBlazor 组件库（nuget.org 上的已发布版本）。
+        需要 maui-windows 工作负载（dotnet workload install maui-windows）。
+    -->
+    <PropertyGroup>
+        <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+        <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+        <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+        <OutputType>WinExe</OutputType>
+        <RootNamespace>LearnSite</RootNamespace>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <UseMaui>true</UseMaui>
+        <SingleProject>true</SingleProject>
+        <!-- 样式由 Blazor 处理，不当作 MAUI 的样式表 -->
+        <EnableDefaultCssItems>false</EnableDefaultCssItems>
+        <ApplicationTitle>C# 学习站</ApplicationTitle>
+        <ApplicationId>com.kenconnet666.learnsite</ApplicationId>
+        <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+        <ApplicationVersion>1</ApplicationVersion>
+        <!-- 不打 MSIX 包，直接运行 exe -->
+        <WindowsPackageType>None</WindowsPackageType>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <!-- 两个 MAUI 包的版本要与本机装的 maui-windows 工作负载一致（dotnet workload list） -->
+        <PackageReference Include="Microsoft.Maui.Controls" Version="10.0.110" />
+        <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="10.0.110" />
+        <PackageReference Include="RuneForBlazor.UI" Version="0.17.0" />
+        <PackageReference Include="RuneForBlazor.Icons" Version="0.17.0" />
+        <PackageReference Include="RuneForBlazor.Desktop.Maui" Version="0.17.0" />
+    </ItemGroup>
+
+</Project>

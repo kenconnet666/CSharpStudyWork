@@ -1,0 +1,66 @@
+@*
+    一排字节：每格显示两位十六进制，下面是它在内存里的地址（0、1、2……）。
+    大小端演示用它并排展示"同一个数在内存里的两种排法"；Tags 给每个字节加一个小标签（如 "高"、"低"）。
+*@
+@namespace LearnSite.Components.Visuals
+@inherits RuneComponent
+
+<div @attributes="Attrs.Merge(RowLayer)">
+    @if (Label.Length > 0)
+    {
+        <span @attributes="Attrs.Merge(LabelLayer)">@Label</span>
+    }
+    @for (var i = 0; i < Bytes.Length; i++)
+    {
+        var index = i;
+        <div @key="index" @attributes="Attrs.Merge(CellLayer)">
+            <span @attributes="Attrs.Merge(ValueLayer)">@Bytes[index].ToString("X2")</span>
+            <span @attributes="Attrs.Merge(SmallLayer)">地址 @index</span>
+            @if (Tags is not null && index < Tags.Length)
+            {
+                <span @attributes="Attrs.Merge(TagLayer)">@Tags[index]</span>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    /// <summary>要显示的字节。</summary>
+    [Parameter] public byte[] Bytes { get; set; } = [];
+
+    /// <summary>行首的名字。</summary>
+    [Parameter] public string Label { get; set; } = "";
+
+    /// <summary>每个字节下面的小标签，按下标对应，可以比字节少。</summary>
+    [Parameter] public string[]? Tags { get; set; }
+
+    static readonly Attrs RowLayer = new() { Sx = Row };
+    static readonly Attrs LabelLayer = new() { Sx = LabelStyle };
+    static readonly Attrs CellLayer = new() { Sx = Cell };
+    static readonly Attrs ValueLayer = new() { Sx = Value };
+    static readonly Attrs SmallLayer = new() { Sx = Small };
+    static readonly Attrs TagLayer = new() { Sx = Tag };
+
+    static Style Row => Css.Define(static () => new Style { Display = Display.Flex, AlignItems = AlignItems.Center, Gap = Space.Xs, FlexWrap = FlexWrap.Wrap });
+
+    static Style LabelStyle => Css.Define(static () => new Style { Width = CssLength.Rem(9), FontWeight = FontWeights.Semibold, Color = Colors.TextMuted });
+
+    static Style Cell => Css.Define(static () => new Style
+    {
+        Display = Display.Flex,
+        FlexDirection = FlexDirection.Column,
+        AlignItems = AlignItems.Center,
+        Gap = Space.Xs,
+        Width = CssLength.Rem(4.5),
+        Padding = Space.Sm,
+        BorderRadius = Radii.Md,
+        BackgroundColor = Tones.Accent.Soft,
+        Color = Tones.Accent.Text,
+    });
+
+    static Style Value => Css.Define(static () => new Style { FontFamily = Fonts.Mono, FontSize = CssLength.Rem(1.5), FontWeight = FontWeights.Semibold });
+
+    static Style Small => Css.Define(static () => new Style { FontSize = CssLength.Rem(0.7), Opacity = 0.7 });
+
+    static Style Tag => Css.Define(static () => new Style { FontSize = CssLength.Rem(0.75), FontWeight = FontWeights.Semibold });
+}

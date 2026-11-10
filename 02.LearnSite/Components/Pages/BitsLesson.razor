@@ -1,0 +1,174 @@
+@page "/bits"
+@inherits RuneComponent
+
+@*
+    第 1 课：位与字节。三个演示：
+      1. 一个字节：点 8 个位格，同时看十进制、有符号、十六进制、二进制
+      2. 位运算：| & ^ ~ << >> 逐位对齐着看
+      3. Flags：把几个开关存进一个字节（对应 01.CSharpSyntax 练习 12 的报警标志）
+    页面上显示的数字都是 C# 当场算出来的。
+*@
+
+<Container Size="ContainerSize.Lg" Padding="SpaceScale.None">
+    <Flex Direction="LayoutDirection.Column" Gap="SpaceScale.Xl">
+
+        <Prose Measure="false">
+            <H1>位与字节</H1>
+            <Paragraph>
+                计算机里一切都是 0 和 1。一个 <Code>byte</Code> 有 8 个位，每一位有一个"权重"（右边是 1，往左依次 2、4、8……128），
+                哪些位是 1，就把它们的权重加起来，这就是这个字节的值。
+            </Paragraph>
+        </Prose>
+
+        @* ---------- 演示 1：一个字节 ---------- *@
+        <Card>
+            <Header><Strong>演示 1：点一点位格</Strong></Header>
+            <ChildContent>
+                <Flex Direction="LayoutDirection.Column" Gap="SpaceScale.Lg">
+                    <BitRow Label="byte" @bind-Value="single" />
+                    <Flex Gap="SpaceScale.Sm" Wrap="true">
+                        <Button Variant="ButtonVariant.Soft" Tone="Tone.Neutral" @onclick="@(() => single = 0)">清零</Button>
+                        <Button Variant="ButtonVariant.Soft" Tone="Tone.Neutral" @onclick="@(() => single = 255)">全部置 1</Button>
+                        <Button Variant="ButtonVariant.Soft" Tone="Tone.Neutral" @onclick="@(() => single = 0b1000_0000)">只有最高位</Button>
+                        <Button Variant="ButtonVariant.Soft" Tone="Tone.Neutral" @onclick="@(() => single = 0b0000_1010)">0b0000_1010</Button>
+                    </Flex>
+                    <Grid MinItemWidth="CssLength.Rem(11)" Gap="SpaceScale.Sm">
+                        <Readout Title="byte（无符号 0~255）" Value="@single.ToString()" />
+                        <Readout Title="sbyte（有符号 -128~127）" Value="@unchecked((sbyte)single).ToString()" />
+                        <Readout Title="十六进制" Value="@($"0x{single:X2}")" />
+                        <Readout Title="二进制" Value="@Binary(single)" />
+                    </Grid>
+                    <Paragraph Size="Size.Sm" Tone="TextTone.Muted">
+                        试试"只有最高位"：它是无符号的 128，却是有符号的 -128。同一串 0 和 1，是正是负，取决于你把它当成 byte 还是 sbyte。
+                    </Paragraph>
+                </Flex>
+            </ChildContent>
+        </Card>
+
+        @* ---------- 演示 2：位运算 ---------- *@
+        <Card>
+            <Header><Strong>演示 2：位运算</Strong></Header>
+            <ChildContent>
+                <Flex Direction="LayoutDirection.Column" Gap="SpaceScale.Lg">
+                    <ToggleGroup @bind-Value="op" Required="true" aria-label="运算">
+                        <ToggleItem Value="or">| 或</ToggleItem>
+                        <ToggleItem Value="and">&amp; 与</ToggleItem>
+                        <ToggleItem Value="xor">^ 异或</ToggleItem>
+                        <ToggleItem Value="not">~ 取反</ToggleItem>
+                        <ToggleItem Value="shl">&lt;&lt; 左移</ToggleItem>
+                        <ToggleItem Value="shr">&gt;&gt; 右移</ToggleItem>
+                    </ToggleGroup>
+
+                    <Flex Direction="LayoutDirection.Column" Gap="SpaceScale.Sm">
+                        <BitRow Label="a" @bind-Value="a" />
+                        @if (op is "or" or "and" or "xor")
+                        {
+                            <BitRow Label="b" @bind-Value="b" />
+                        }
+                        else if (op is "shl" or "shr")
+                        {
+                            <Field Label="@($"移动 {shift} 位")">
+                                <Slider TValue="int" @bind-Value="shift" Min="1" Max="7" />
+                            </Field>
+                        }
+                        <BitRow Label="结果" Value="Result" ReadOnly="true" />
+                    </Flex>
+
+                    <CodeBlock Code="@CodeLine" Lang="csharp" Highlight="false" Copyable="false" />
+                    <Paragraph Size="Size.Sm" Tone="TextTone.Muted">@Explanation</Paragraph>
+                </Flex>
+            </ChildContent>
+        </Card>
+
+        @* ---------- 演示 3：Flags ---------- *@
+        <Card>
+            <Header><Strong>演示 3：用一个字节存几个开关（Flags）</Strong></Header>
+            <ChildContent>
+                <Flex Direction="LayoutDirection.Column" Gap="SpaceScale.Lg">
+                    <ToggleGroup SelectionMode="SelectionMode.Multiple" @bind-Values="alarms" aria-label="报警">
+                        @foreach (var (name, bit) in alarmDefs)
+                        {
+                            <ToggleItem Value="@name">@name (1 &lt;&lt; @bit)</ToggleItem>
+                        }
+                    </ToggleGroup>
+                    <BitRow Label="字节" Value="AlarmByte" ReadOnly="true" />
+                    <CodeBlock Code="@AlarmCode" Lang="csharp" Highlight="false" Copyable="false" />
+                    <Paragraph Size="Size.Sm" Tone="TextTone.Muted">
+                        每个报警占一位，互不干扰：打开一个开关 = 这一位置 1（<Code>|=</Code>），关闭 = 清 0（<Code>&amp;= ~</Code>）。
+                        设备发来的状态字节，就是这样一位一位地表示"哪些报警正在发生"。
+                    </Paragraph>
+                </Flex>
+            </ChildContent>
+        </Card>
+
+        <Prose Measure="false">
+            <H2>要记住的四句话</H2>
+            <ul>
+                <li><strong>byte 是 0~255，没有符号</strong>；sbyte 才有符号。Java 的 byte 是有符号的，这是两门语言最大的差别之一。</li>
+                <li><strong>置位用 <Code>|</Code></strong>，<strong>清除用 <Code>&amp; ~</Code></strong>，<strong>翻转用 <Code>^</Code></strong>，<strong>检测用 <Code>&amp;</Code></strong>。</li>
+                <li><strong>左移一位 = 乘 2，右移一位 = 除 2</strong>（整数）；左移时超出 8 位的部分会丢掉。</li>
+                <li>位运算的结果在 C# 里是 <Code>int</Code>，赋回 <Code>byte</Code> 要强转，强转会静默截断高位。</li>
+            </ul>
+        </Prose>
+    </Flex>
+</Container>
+
+@code {
+    // ---- 演示 1 ----
+    byte single = 0b0000_1010;
+
+    // ---- 演示 2 ----
+    string op = "or";
+    byte a = 0b0000_1100;
+    byte b = 0b0000_1010;
+    int shift = 1;
+
+    byte Result => op switch
+    {
+        "or" => (byte)(a | b),
+        "and" => (byte)(a & b),
+        "xor" => (byte)(a ^ b),
+        "not" => (byte)~a,
+        "shl" => (byte)(a << shift),
+        "shr" => (byte)(a >> shift),
+        _ => 0,
+    };
+
+    string CodeLine => op switch
+    {
+        "or" => $"byte result = (byte)({Literal(a)} | {Literal(b)});   // {Result}",
+        "and" => $"byte result = (byte)({Literal(a)} & {Literal(b)});   // {Result}",
+        "xor" => $"byte result = (byte)({Literal(a)} ^ {Literal(b)});   // {Result}",
+        "not" => $"byte result = (byte)~{Literal(a)};   // {Result}",
+        "shl" => $"byte result = (byte)({Literal(a)} << {shift});   // {Result}",
+        "shr" => $"byte result = (byte)({Literal(a)} >> {shift});   // {Result}",
+        _ => "",
+    };
+
+    string Explanation => op switch
+    {
+        "or" => "或：两个位只要有一个是 1，结果就是 1。常用来\"置位\"：把某些位打开，其他位不变。",
+        "and" => "与：两个位都是 1，结果才是 1。常用来\"检测\"或\"屏蔽\"：只留下想要的位。",
+        "xor" => "异或：两个位不同，结果是 1。常用来\"翻转\"某些位；自己异或自己得 0。",
+        "not" => "取反：0 变 1，1 变 0。~ 常和 & 配合清除某一位：x &= ~flag。",
+        "shl" => "左移：整体向左移，右边补 0，超出 8 位的部分丢掉。每移一位相当于乘 2。",
+        "shr" => "右移：整体向右移，左边补 0（对 byte 来说）。每移一位相当于除以 2 并舍去余数。",
+        _ => "",
+    };
+
+    // ---- 演示 3 ----
+    static readonly (string Name, int Bit)[] alarmDefs = [("Overheat", 0), ("Overload", 1), ("Offline", 2), ("LowPressure", 3)];
+
+    IReadOnlyList<string> alarms = ["Overheat", "Offline"];
+
+    byte AlarmByte => (byte)alarmDefs.Where(d => alarms.Contains(d.Name)).Sum(d => 1 << d.Bit);
+
+    string AlarmCode => alarms.Count == 0
+        ? $"var alarm = Alarm.None;   // 0"
+        : $"var alarm = {string.Join(" | ", alarmDefs.Where(d => alarms.Contains(d.Name)).Select(d => $"Alarm.{d.Name}"))};   // 值 = {AlarmByte}，二进制 {Literal(AlarmByte)}";
+
+    // ---- 小工具 ----
+    static string Binary(byte value) => Convert.ToString(value, 2).PadLeft(8, '0').Insert(4, "_");
+
+    static string Literal(byte value) => $"0b{Binary(value)}";
+}

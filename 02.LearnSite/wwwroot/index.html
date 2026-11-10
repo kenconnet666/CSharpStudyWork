@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>C# 学习站</title>
+    <base href="/" />
+    <style>
+        /* 主题应用之前的底色：同 Rune 内置亮、暗主题的 Background，跟随系统明暗 */
+        html { color-scheme: light dark; background: #f9f9fb; }
+        @media (prefers-color-scheme: dark) { html { background: #111113; } }
+
+        /* Rune 的样式还没输出时不显示内容，避免闪一下没有样式的页面；样式到了（#app 里有 style[data-rune]）内容淡入 */
+        #app:not(:has(style[data-rune])) { visibility: hidden; }
+        #app:has(style[data-rune]) { animation: appear 0.25s ease-out; }
+        @keyframes appear { from { opacity: 0; } }
+    </style>
+    <link rel="stylesheet" href="app.css" />
+</head>
+
+<body>
+    <div id="app"></div>
+    <script src="_framework/blazor.webview.js" autostart="false"></script>
+</body>
+
+</html>

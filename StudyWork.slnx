@@ -1,3 +1,4 @@
 <Solution>
   <Project Path="01.CSharpSyntax/CSharpSyntax.csproj" />
+  <Project Path="02.LearnSite/LearnSite.csproj" />
 </Solution>

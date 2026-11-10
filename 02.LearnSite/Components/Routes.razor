@@ -1,0 +1,16 @@
+@*
+    路由：整个窗口一个交互根，新用到的样式由这里的 RuneStyles 输出，应用级主题（RuneProvider）包住所有页面。
+    没有 Razor 的 head（Blazor Hybrid）：主题配置（ThemeBootScript）也放在这里，Rune 的脚本看到它后给根元素设好主题与底色。
+*@
+@inherits RuneComponent
+
+<ThemeBootScript />
+<RuneStyles />
+<RuneProvider>
+    <Router AppAssembly="typeof(MauiProgram).Assembly">
+        <Found Context="routeData">
+            <RouteView RouteData="routeData" DefaultLayout="typeof(MainLayout)" />
+            <FocusOnNavigate RouteData="routeData" Selector="h1" />
+        </Found>
+    </Router>
+</RuneProvider>

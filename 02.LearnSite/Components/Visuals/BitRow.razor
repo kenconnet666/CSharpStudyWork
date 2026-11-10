@@ -1,0 +1,76 @@
+@*
+    一个字节的 8 个位：每格显示 0 或 1，下面是这一位的"权重"（2 的几次方）。
+    可编辑时点一格翻转这一位；ReadOnly 时只显示（用来展示运算结果）。
+    这是后面"位与字节""大小端"等演示共用的小部件。
+*@
+@namespace LearnSite.Components.Visuals
+@inherits RuneComponent
+
+<div @attributes="Attrs.Merge(RowLayer)">
+    @if (Label.Length > 0)
+    {
+        <span @attributes="Attrs.Merge(LabelLayer)">@Label</span>
+    }
+    @for (var bit = 7; bit >= 0; bit--)
+    {
+        var index = bit;
+        var on = (Value >> index & 1) == 1;
+        <button @key="index" type="button" disabled="@ReadOnly" aria-pressed="@on" aria-label="@($"第 {index} 位，当前 {(on ? 1 : 0)}")"
+                @attributes="Attrs.Merge(ReadOnly ? (on ? CellOnStatic : CellOffStatic) : (on ? CellOn : CellOff))"
+                @onclick="() => Toggle(index)">
+            <span>@(on ? 1 : 0)</span>
+            <span @attributes="Attrs.Merge(WeightLayer)">@(1 << index)</span>
+        </button>
+    }
+</div>
+
+@code {
+    /// <summary>当前的字节值。</summary>
+    [Parameter] public byte Value { get; set; }
+
+    /// <summary>点击翻转某一位后的新值（可编辑时才触发）。</summary>
+    [Parameter] public EventCallback<byte> ValueChanged { get; set; }
+
+    /// <summary>只读：不能点击，用来展示结果。</summary>
+    [Parameter] public bool ReadOnly { get; set; }
+
+    /// <summary>行首的名字，如 "a"、"结果"。</summary>
+    [Parameter] public string Label { get; set; } = "";
+
+    Task Toggle(int bit) => ValueChanged.InvokeAsync((byte)(Value ^ 1 << bit));
+
+    // ---- 样式：静态定义一次，渲染时只挑选，不在渲染里新建（分析器 RUNE004/005 要求） ----
+    static readonly Attrs RowLayer = new() { Sx = Row };
+    static readonly Attrs LabelLayer = new() { Sx = LabelStyle };
+    static readonly Attrs WeightLayer = new() { Sx = Weight };
+    static readonly Attrs CellOn = new() { Sx = Sx.Of(Cell, Interactive, On) };
+    static readonly Attrs CellOff = new() { Sx = Sx.Of(Cell, Interactive, Off) };
+    static readonly Attrs CellOnStatic = new() { Sx = Sx.Of(Cell, On) };
+    static readonly Attrs CellOffStatic = new() { Sx = Sx.Of(Cell, Off) };
+
+    static Style Row => Css.Define(static () => new Style { Display = Display.Flex, AlignItems = AlignItems.Center, Gap = Space.Xs });
+
+    static Style LabelStyle => Css.Define(static () => new Style { Width = CssLength.Rem(4), FontWeight = FontWeights.Semibold, Color = Colors.TextMuted });
+
+    static Style Cell => Css.Define(static () => new Style
+    {
+        Display = Display.Flex,
+        FlexDirection = FlexDirection.Column,
+        AlignItems = AlignItems.Center,
+        JustifyContent = JustifyContent.Center,
+        Width = CssLength.Rem(2.75),
+        Height = CssLength.Rem(3.5),
+        BorderRadius = Radii.Md,
+        FontFamily = Fonts.Mono,
+        FontSize = CssLength.Rem(1.25),
+        Transition = $"background-color {Durations.Sm} {Easings.Standard}",
+    });
+
+    static Style Interactive => Css.Define(static () => new Style { Cursor = Cursor.Pointer });
+
+    static Style On => Css.Define(static () => new Style { BackgroundColor = Tones.Accent.Soft, Color = Tones.Accent.Text });
+
+    static Style Off => Css.Define(static () => new Style { BackgroundColor = Colors.Fill, Color = Colors.TextMuted });
+
+    static Style Weight => Css.Define(static () => new Style { FontSize = CssLength.Rem(0.7), Opacity = 0.7 });
+}

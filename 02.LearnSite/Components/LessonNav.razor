@@ -1,0 +1,15 @@
+@*
+    左侧导航。独立成没有参数的组件：外壳每次换页都会重新渲染，拆出来以后这里直接跳过，当前页的高亮由各个 NavItem 自己跟着地址更新。
+*@
+@inherits RuneComponent
+
+<NavList aria-label="课程">
+    <NavSection Label="开始">
+        <NavItem Href="" Icon="Lucide.House">首页</NavItem>
+    </NavSection>
+    <NavSection Label="看见底层">
+        <NavItem Href="bits" Icon="Lucide.ToggleRight">位与字节</NavItem>
+        <NavItem Href="endian" Icon="Lucide.ArrowLeftRight">大小端</NavItem>
+        <NavItem Href="memory" Icon="Lucide.Boxes">值类型与引用类型</NavItem>
+    </NavSection>
+</NavList>

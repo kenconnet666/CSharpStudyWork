@@ -1,0 +1,45 @@
+@*
+    一个"盒子"：变量或对象，上面是名字，下面是里面装的内容。Changed 为 true 时用醒目的颜色，提示"这个值刚刚变了"。
+*@
+@namespace LearnSite.Components.Visuals
+@inherits RuneComponent
+
+<div @attributes="Attrs.Merge(Changed ? ChangedLayer : NormalLayer)">
+    <span @attributes="Attrs.Merge(NameLayer)">@Name</span>
+    <span @attributes="Attrs.Merge(DataLayer)">@Data</span>
+</div>
+
+@code {
+    /// <summary>变量名或对象名。</summary>
+    [Parameter] public string Name { get; set; } = "";
+
+    /// <summary>里面的内容。</summary>
+    [Parameter] public string Data { get; set; } = "";
+
+    /// <summary>刚刚被修改过：换成醒目的颜色。</summary>
+    [Parameter] public bool Changed { get; set; }
+
+    static readonly Attrs NormalLayer = new() { Sx = Sx.Of(Box, Normal) };
+    static readonly Attrs ChangedLayer = new() { Sx = Sx.Of(Box, Highlight) };
+    static readonly Attrs NameLayer = new() { Sx = NameStyle };
+    static readonly Attrs DataLayer = new() { Sx = DataStyle };
+
+    static Style Box => Css.Define(static () => new Style
+    {
+        Display = Display.Flex,
+        FlexDirection = FlexDirection.Column,
+        Gap = Space.Xs,
+        MinWidth = CssLength.Rem(7),
+        Padding = Space.Md,
+        BorderRadius = Radii.Md,
+        Transition = $"background-color {Durations.Md} {Easings.Standard}",
+    });
+
+    static Style Normal => Css.Define(static () => new Style { BackgroundColor = Colors.SurfaceMuted });
+
+    static Style Highlight => Css.Define(static () => new Style { BackgroundColor = Tones.Accent.Soft, Color = Tones.Accent.Text });
+
+    static Style NameStyle => Css.Define(static () => new Style { FontSize = CssLength.Rem(0.75), Opacity = 0.7 });
+
+    static Style DataStyle => Css.Define(static () => new Style { FontFamily = Fonts.Mono, FontWeight = FontWeights.Semibold });
+}

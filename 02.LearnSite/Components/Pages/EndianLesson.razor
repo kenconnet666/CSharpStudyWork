@@ -1,0 +1,141 @@
+@page "/endian"
+@using System.Buffers.Binary
+@using System.Globalization
+@inherits RuneComponent
+
+@*
+    第 2 课：大小端。输入一个数，看它在内存/线路上的两种排法，以及"用错字节序读"会读成什么。
+    字节都是 BinaryPrimitives 当场写出来的，和 01.CSharpSyntax 里练习 12 用的是同一个类。
+*@
+
+<Container Size="ContainerSize.Lg" Padding="SpaceScale.None">
+    <Flex Direction="LayoutDirection.Column" Gap="SpaceScale.Xl">
+
+        <Prose Measure="false">
+            <H1>大小端：一个数，两种排法</H1>
+            <Paragraph>
+                寄存器值 <Code>0x1234</Code> 有两个字节：高字节 <Code>12</Code>、低字节 <Code>34</Code>。通信时先发哪个，两边必须约定好，
+                这就是<strong>字节序</strong>。大端先发高字节（Modbus、西门子 S7 都是大端），小端先发低字节（x86 电脑内存是小端）。
+            </Paragraph>
+        </Prose>
+
+        <Card>
+            <Header><Strong>演示：输入一个数</Strong></Header>
+            <ChildContent>
+                <Flex Direction="LayoutDirection.Column" Gap="SpaceScale.Lg">
+                    <Flex Gap="SpaceScale.Md" Align="ItemAlign.End" Wrap="true">
+                        <Field Label="十六进制数值" Error="@(valid ? null : "请输入十六进制数字（0~9、A~F）")">
+                            <TextField @bind-Value="hex" @bind-Value:after="Parse"><Prefix>0x</Prefix></TextField>
+                        </Field>
+                        <ToggleGroup @bind-Value="width" Required="true" aria-label="位宽" @bind-Value:after="Parse">
+                            <ToggleItem Value="16">16 位（ushort）</ToggleItem>
+                            <ToggleItem Value="32">32 位（uint）</ToggleItem>
+                        </ToggleGroup>
+                    </Flex>
+                    <Flex Gap="SpaceScale.Sm" Wrap="true">
+                        <Button Variant="ButtonVariant.Soft" Tone="Tone.Neutral" @onclick="@(() => Preset("16", "1234"))">0x1234</Button>
+                        <Button Variant="ButtonVariant.Soft" Tone="Tone.Neutral" @onclick="@(() => Preset("16", "000A"))">0x000A（10）</Button>
+                        <Button Variant="ButtonVariant.Soft" Tone="Tone.Neutral" @onclick="@(() => Preset("32", "00010002"))">0x00010002</Button>
+                        <Button Variant="ButtonVariant.Soft" Tone="Tone.Neutral" @onclick="@(() => Preset("32", "3FC00000"))">0x3FC00000（1.5f）</Button>
+                    </Flex>
+
+                    <Flex Direction="LayoutDirection.Column" Gap="SpaceScale.Sm">
+                        <ByteCells Label="大端（先发高位）" Bytes="Big" Tags="BigTags" />
+                        <ByteCells Label="小端（先发低位）" Bytes="Little" Tags="LittleTags" />
+                    </Flex>
+
+                    <CodeBlock Code="@Code" Lang="csharp" Highlight="false" Copyable="false" />
+                </Flex>
+            </ChildContent>
+        </Card>
+
+        <Card>
+            <Header><Strong>读错会怎样</Strong></Header>
+            <ChildContent>
+                <Flex Direction="LayoutDirection.Column" Gap="SpaceScale.Md">
+                    <Paragraph>
+                        设备按<strong>大端</strong>发来 <Code>@BigHex</Code>，如果你按<strong>小端</strong>去读：
+                    </Paragraph>
+                    <Grid MinItemWidth="CssLength.Rem(14)" Gap="SpaceScale.Sm">
+                        <Readout Title="按大端读（正确）" Value="@($"0x{value.ToString(Format)}  =  {value}")" />
+                        <Readout Title="按小端读（读错）" Value="@($"0x{wrong.ToString(Format)}  =  {wrong}")" />
+                    </Grid>
+                    <Alert Tone="@(value == wrong ? Tone.Info : Tone.Warning)">
+                        @(value == wrong
+                            ? "这个数的字节正好对称（或只有一个字节有值的位置对称），两种读法结果相同，换一个数试试。"
+                            : "同样的字节，读出来是完全不同的数。上位机里读到\"离谱的数值\"，第一个要怀疑的就是字节序。")
+                    </Alert>
+                </Flex>
+            </ChildContent>
+        </Card>
+
+        <Prose Measure="false">
+            <H2>要记住的</H2>
+            <ul>
+                <li>字节序只影响<strong>多字节的数</strong>（ushort、uint、float……）；单个 byte 没有字节序问题。</li>
+                <li>Modbus 的寄存器、S7 的 INT/DINT/REAL 都是大端；<Code>BitConverter</Code> 用的是本机字节序（x86 为小端），直接拿它解析协议数据会读错。</li>
+                <li>写协议代码一律用 <Code>BinaryPrimitives</Code>，方法名里写明 <Code>BigEndian</Code> 或 <Code>LittleEndian</Code>，一眼就能核对。</li>
+            </ul>
+        </Prose>
+    </Flex>
+</Container>
+
+@code {
+    string hex = "1234";
+    string width = "16";
+    bool valid = true;
+    uint value = 0x1234;
+
+    int Size => width == "32" ? 4 : 2;
+
+    string Format => "X" + Size * 2;
+
+    string BigHex => Convert.ToHexString(Big);
+
+    byte[] Big { get; set; } = [0x12, 0x34];
+
+    byte[] Little { get; set; } = [0x34, 0x12];
+
+    uint wrong;
+
+    string[] BigTags => Size == 2 ? ["高字节", "低字节"] : ["最高字节", "", "", "最低字节"];
+
+    string[] LittleTags => Size == 2 ? ["低字节", "高字节"] : ["最低字节", "", "", "最高字节"];
+
+    string Code => Size == 2
+        ? $"BinaryPrimitives.WriteUInt16BigEndian(buffer, 0x{value:X4});      // buffer = {BigHex}\n" +
+          $"BinaryPrimitives.WriteUInt16LittleEndian(buffer, 0x{value:X4});   // buffer = {Convert.ToHexString(Little)}"
+        : $"BinaryPrimitives.WriteUInt32BigEndian(buffer, 0x{value:X8});      // buffer = {BigHex}\n" +
+          $"BinaryPrimitives.WriteUInt32LittleEndian(buffer, 0x{value:X8});   // buffer = {Convert.ToHexString(Little)}";
+
+    protected override void OnInitialized() => Parse();
+
+    void Preset(string newWidth, string newHex)
+    {
+        width = newWidth;
+        hex = newHex;
+        Parse();
+    }
+
+    // 输入或位宽变化时重新算：数值、两种排法、读错的值
+    void Parse()
+    {
+        valid = uint.TryParse(hex, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var parsed);
+        value = Size == 2 ? parsed & 0xFFFF : parsed;
+
+        Big = new byte[Size];
+        Little = new byte[Size];
+        if (Size == 2)
+        {
+            BinaryPrimitives.WriteUInt16BigEndian(Big, (ushort)value);
+            BinaryPrimitives.WriteUInt16LittleEndian(Little, (ushort)value);
+            wrong = BinaryPrimitives.ReadUInt16LittleEndian(Big);
+        }
+        else
+        {
+            BinaryPrimitives.WriteUInt32BigEndian(Big, value);
+            BinaryPrimitives.WriteUInt32LittleEndian(Little, value);
+            wrong = BinaryPrimitives.ReadUInt32LittleEndian(Big);
+        }
+    }
+}

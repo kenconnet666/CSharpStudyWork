@@ -1,0 +1,33 @@
+@*
+    一格读数：小标题 + 等宽字体的值。演示里用来并排展示"同一个数的不同写法"。
+*@
+@namespace LearnSite.Components.Visuals
+@inherits RuneComponent
+
+<div @attributes="Attrs.Merge(BoxLayer)">
+    <Small Tone="TextTone.Muted">@Title</Small>
+    <span @attributes="Attrs.Merge(ValueLayer)">@Value</span>
+</div>
+
+@code {
+    /// <summary>小标题。</summary>
+    [Parameter] public string Title { get; set; } = "";
+
+    /// <summary>值（已经格式化好的文字）。</summary>
+    [Parameter] public string Value { get; set; } = "";
+
+    static readonly Attrs BoxLayer = new() { Sx = Box };
+    static readonly Attrs ValueLayer = new() { Sx = ValueStyle };
+
+    static Style Box => Css.Define(static () => new Style
+    {
+        Display = Display.Flex,
+        FlexDirection = FlexDirection.Column,
+        Gap = Space.Xs,
+        Padding = Space.Md,
+        BorderRadius = Radii.Md,
+        BackgroundColor = Colors.SurfaceMuted,
+    });
+
+    static Style ValueStyle => Css.Define(static () => new Style { FontFamily = Fonts.Mono, FontSize = CssLength.Rem(1.25), FontWeight = FontWeights.Semibold });
+}

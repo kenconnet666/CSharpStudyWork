@@ -1,0 +1,9 @@
+html, body {
+    margin: 0;
+    height: 100%;
+}
+
+/* 等宽字体：位格、十六进制、代码演示里用 */
+.mono {
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+}

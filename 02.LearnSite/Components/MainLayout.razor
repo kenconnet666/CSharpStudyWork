@@ -1,0 +1,33 @@
+@*
+    外壳：AppShell 的顶栏（站点名、主题切换）、左侧的课程导航，正文是当前路由的页面。
+    新增一课：在 LessonNav 里加一项，再写一个带 @page 的页面。
+*@
+@inherits RuneLayoutComponent
+
+<AppShell PropsMain="MainLayer">
+    <Brand><AppShellBrand Href="" Icon="Lucide.GraduationCap">C# 学习站</AppShellBrand></Brand>
+    <Header>
+        <div @attributes="Attrs.Merge(ToolsLayer)">
+            <ThemeSwitcher />
+        </div>
+    </Header>
+    <Sidebar><LessonNav /></Sidebar>
+    <ChildContent>
+        <div @attributes="Attrs.Merge(PageLayer)">@Body</div>
+    </ChildContent>
+</AppShell>
+<Toaster />
+
+@code {
+    static readonly Attrs MainLayer = new() { Sx = Main };
+    static readonly Attrs PageLayer = new() { Sx = Page };
+    static readonly Attrs ToolsLayer = new() { Sx = Tools };
+
+    // 标题离顶栏远一点，页底留出空白
+    static Style Main => Css.Define(static () => new Style { PaddingBlockStart = CssLength.Rem(2), PaddingBlockEnd = CssLength.Rem(4) });
+
+    static Style Page => Css.Define(static () => new Style { Display = Display.Flex, FlexDirection = FlexDirection.Column, Gap = Space.Xl });
+
+    // 顶栏的工具靠结束边
+    static Style Tools => Css.Define(static () => new Style { Display = Display.Flex, AlignItems = AlignItems.Center, Gap = Space.Md, MarginInlineStart = CssLength.Auto });
+}
