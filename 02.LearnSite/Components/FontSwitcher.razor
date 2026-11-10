@@ -1,0 +1,48 @@
+@*
+    顶栏的字体切换（取自 Rune 文档站的 DocsFontSwitcher）：图标按钮弹出单选菜单，在系统字体（默认）、等距更纱黑体 SC、
+    霞鹜文楷等宽之间换。选择记在浏览器存储里，换字体变量的 CSS 在 wwwroot/app.css，加载字体与记住选择在 wwwroot/fonts.js。
+    网页字体第一次选到时从 CDN 加载（需要联网），离线时仍用系统字体。
+*@
+@inherits RuneComponent
+@using Microsoft.JSInterop
+@inject IJSRuntime JS
+
+<Menu>
+    <Trigger Context="t"><IconButton Icon="Lucide.Type" Label="字体" @attributes="t" /></Trigger>
+    <ChildContent>
+        <MenuRadioGroup aria-label="字体" Value="@font" ValueChanged="Choose">
+            @foreach (var (name, label) in Fonts)
+            {
+                <MenuRadioItem @key="name" Value="@name">@label</MenuRadioItem>
+            }
+        </MenuRadioGroup>
+    </ChildContent>
+</Menu>
+
+@code {
+    // 菜单里按这个顺序列出；名字与 fonts.js 里的一致
+    static readonly (string Name, string Label)[] Fonts =
+    [
+        ("system", "系统字体（微软雅黑等）"),
+        ("sarasa", "等距更纱黑体 SC"),
+        ("wenkai", "霞鹜文楷等宽"),
+    ];
+
+    string font = "system";
+
+    // 读不到浏览器里记住的选择要等到交互之后：读到后更新选中标记
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        var stored = await JS.InvokeAsync<string>("learnFonts.get");
+        if (stored == font) return;
+        font = stored;
+        StateHasChanged();
+    }
+
+    async Task Choose(string? name)
+    {
+        font = name ?? "system";
+        await JS.InvokeVoidAsync("learnFonts.set", font);
+    }
+}

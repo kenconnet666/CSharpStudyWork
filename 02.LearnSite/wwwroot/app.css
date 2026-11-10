@@ -7,3 +7,17 @@ html, body {
 .mono {
     font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
 }
+
+/* 字体切换（fonts.js）：最外层的 RuneProvider 换字体变量，正文、标题、代码一起换。
+   网页字体选到时才从 CDN 加载（需要联网），没加载到之前、或者离线时用系统字体。 */
+:root[data-learn-font="sarasa"] [data-rune-theme]:not([data-rune-theme] *) {
+    --rune-fonts-sans: "Sarasa Mono SC", ui-monospace, system-ui, monospace;
+    --rune-fonts-heading: "Sarasa Mono SC", ui-monospace, system-ui, monospace;
+    --rune-fonts-mono: "Sarasa Mono SC", ui-monospace, system-ui, monospace;
+}
+
+:root[data-learn-font="wenkai"] [data-rune-theme]:not([data-rune-theme] *) {
+    --rune-fonts-sans: "LXGW WenKai Mono", ui-monospace, system-ui, monospace;
+    --rune-fonts-heading: "LXGW WenKai Mono", ui-monospace, system-ui, monospace;
+    --rune-fonts-mono: "LXGW WenKai Mono", ui-monospace, system-ui, monospace;
+}
