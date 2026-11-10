@@ -37,7 +37,7 @@ public static class Mood
         ["❌"] = (Lucide.CircleX, Tone.Danger),
         ["🚫"] = (Lucide.Ban, Tone.Danger),
         ["🙅"] = (Lucide.Ban, Tone.Warning),
-        ["💥"] = (Lucide.OctagonAlert, Tone.Danger),
+        ["💥"] = (Lucide.OctagonExclamationPoint, Tone.Danger),
         ["🚨"] = (Lucide.Siren, Tone.Danger),
         ["🛑"] = (Lucide.Square, Tone.Danger),
         ["🧊"] = (Lucide.Snowflake, Tone.Warning),
