@@ -1,0 +1,18 @@
+@*
+    "图标 + 文字"的小标题：用 Lucide 图标代替原来写在文字前面的表情符号，图标颜色跟随文字。
+*@
+@namespace LearnSite.Components.Visuals
+@inherits RuneComponent
+
+<Flex Align="ItemAlign.Center" Gap="SpaceScale.Xs">
+    <Icon Data="Icon" />
+    <Strong>@ChildContent</Strong>
+</Flex>
+
+@code {
+    /// <summary>左边的 Lucide 图标。</summary>
+    [Parameter, EditorRequired] public IconData Icon { get; set; } = default!;
+
+    /// <summary>标题文字。</summary>
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

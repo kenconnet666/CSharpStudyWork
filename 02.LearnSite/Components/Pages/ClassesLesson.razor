@@ -37,7 +37,7 @@
             </Stage>
             <Side>
                 <CodeBlock @key="motorKind" Code="@MotorCode" Lang="csharp" Copyable="false" />
-                <Narration @key="@($"{motorKind}{storedSpeed}{motorError}")" Emoji="@(motorError is null ? "📝" : "🚫")">@MotorNote</Narration>
+                <Narration @key="@($"{motorKind}{storedSpeed}{motorError}")" Mood="@(motorError is null ? "📝" : "🚫")">@MotorNote</Narration>
                 <Quiz Question="属性 public int Speed { get; set; } 和公开字段 public int Speed; 用起来写法一样，区别是？" Options="@(new[] { "属性更快", "属性在赋值/读取时能执行代码（校验、通知）", "字段不能被读取" })" Answer="1"
                       Explain="属性背后是 get/set 两个方法，可以在 set 里校验、在 get 里计算；将来加校验也不用改调用方的代码。公开字段做不到这些，所以几乎都用属性。" />
             </Side>
@@ -71,7 +71,7 @@
             </Stage>
             <Side>
                 <CodeBlock Code="@RecordCode" Lang="csharp" Copyable="false" />
-                <Narration Emoji="🧬">
+                <Narration Mood="🧬">
                     <strong>record 比较的是内容，class 比较的是"是不是同一个对象"</strong>：两个内容一样的 record 相等，两个内容一样的 class 却不相等（除非自己重写 Equals）。
                     <Code>with</Code> 复制出一份并改掉指定的成员，原对象不变——不可变数据的惯用写法。
                 </Narration>
@@ -100,7 +100,7 @@
             </Stage>
             <Side>
                 <CodeBlock Code="@OptionsCode" Lang="csharp" Copyable="false" />
-                <Narration Emoji="🔒">
+                <Narration Mood="🔒">
                     <Code>required</Code> 强制创建时必须赋值（忘了就编译不过），<Code>init</Code> 让属性<strong>只能在创建时赋值</strong>，之后不能再改。
                     配上 <Code>new T &#123; ... &#125;</Code> 对象初始化器，写连接配置之类的类型特别舒服：不会漏填，也不会被中途改乱。
                 </Narration>
@@ -214,9 +214,9 @@
     IReadOnlyList<string> optionActions = ["host"];
 
     (bool Ok, string Message) OptionsVerdict =>
-        !optionActions.Contains("host") ? (false, "❌ 编译错误 CS9035：必须设置 required 成员 \"Host\"")
-        : optionActions.Contains("reassign") ? (false, "❌ 编译错误 CS8852：init-only 属性 \"Port\" 只能在对象初始化期间赋值")
-        : (true, "✅ 编译通过");
+        !optionActions.Contains("host") ? (false, "编译错误 CS9035：必须设置 required 成员 \"Host\"")
+        : optionActions.Contains("reassign") ? (false, "编译错误 CS8852：init-only 属性 \"Port\" 只能在对象初始化期间赋值")
+        : (true, "编译通过");
 
     string OptionsCode => string.Join("\n",
         "class ConnectionOptions",

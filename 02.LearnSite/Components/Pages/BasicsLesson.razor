@@ -41,7 +41,7 @@
             </Stage>
             <Side>
                 <CodeBlock Code="@TypeCode" Lang="csharp" Copyable="false" />
-                <Narration @key="typeKey" Emoji="🏷️">
+                <Narration @key="typeKey" Mood="🏷️">
                     <Code>var</Code> 不是 JS 那样的"动态类型"：编译器在<strong>编译时</strong>根据右边推断出一个确定的类型，之后就不能再换了
                     （<Code>var name = "Rider"; name = 123;</Code> 编译不过）。整数除以整数还是整数，想要小数必须有一边是小数。
                     <Code>double</Code> 有二进制浮点误差，金额等要精确的场合用 <Code>decimal</Code>。
@@ -81,7 +81,7 @@
             </Stage>
             <Side>
                 <CodeBlock Code="@FormatCode" Lang="csharp" Copyable="false" />
-                <Narration @key="formatKey" Emoji="🎛️">
+                <Narration @key="formatKey" Mood="🎛️">
                     字符串前面加 <Code>$</Code>，花括号里直接写变量；冒号后面是"怎么显示"。<Code>F2</Code> 保留两位小数、<Code>X2</Code> 十六进制（调协议天天用）、
                     <Code>P1</Code> 百分比（会先乘 100）、<Code>N0</Code> 千分位。
                 </Narration>
@@ -108,7 +108,7 @@
             </Stage>
             <Side>
                 <CodeBlock Code="@NullCode" Lang="csharp" Copyable="false" />
-                <Narration @key="nameState" Emoji="🛡️">
+                <Narration @key="nameState" Mood="🛡️">
                     <Code>?.</Code> 遇到 null 就整体返回 null，不会崩；<Code>??</Code> 给 null 一个默认值；<Code>??=</Code> 只在为 null 时才赋值。
                     <strong>null 和空字符串是两回事</strong>：<Code>"".Length</Code> 是 0，而 <Code>null.Length</Code> 会抛 NullReferenceException——判断"没内容"用 <Code>string.IsNullOrEmpty</Code>。
                 </Narration>
@@ -139,7 +139,7 @@
             </Stage>
             <Side>
                 <CodeBlock Code="@RangeCode" Lang="csharp" Copyable="false" />
-                <Narration Emoji="✂️">
+                <Narration Mood="✂️">
                     <Code>arr[start..end]</Code> 取下标 start 到 end <strong>之前</strong>的元素（左闭右开）；<Code>^1</Code> 是倒数第一个。
                     <Code>(int Min, int Max)</Code> 这种<strong>命名元组</strong>让方法一次返回多个值，调用处直接解构 <Code>var (min, max) = ...</Code>。
                 </Narration>
@@ -234,7 +234,7 @@
             var name = CurrentName;
             string npe;
             try { npe = name!.Length.ToString(); }
-            catch (NullReferenceException) { npe = "💥 抛出 NullReferenceException"; }
+            catch (NullReferenceException) { npe = "抛出 NullReferenceException"; }
             return
             [
                 ("name?.Length", name?.Length is { } length ? length.ToString() : "null"),

@@ -10,7 +10,7 @@
     {
         var lit = Values.Contains(def.Name);
         <button @key="@((def.Name, lit))" type="button" aria-pressed="@lit" @attributes="Attrs.Merge(LampAttrs(def.Bit, lit))" @onclick="() => Toggle(def.Name)">
-            <span @attributes="Attrs.Merge(lit ? EmojiOn : EmojiOff)" aria-hidden="true">@def.Emoji</span>
+            <Icon Data="def.Icon" Sx="@(lit ? IconLit : IconDim)" />
             <strong>@def.Label</strong>
             <span @attributes="Attrs.Merge(BitLayer)">@def.Name · 第 @def.Bit 位</span>
             <span @attributes="Attrs.Merge(BitLayer)">@(lit ? "亮 = 1" : "灭 = 0")</span>
@@ -19,13 +19,13 @@
 </div>
 
 @code {
-    /// <summary>四个报警：枚举名、中文名、位序号、表情。</summary>
-    public static readonly (string Name, string Label, int Bit, string Emoji)[] Defs =
+    /// <summary>四个报警：枚举名、中文名、位序号、Lucide 图标。</summary>
+    public static readonly (string Name, string Label, int Bit, IconData Icon)[] Defs =
     [
-        ("Overheat", "过热", 0, "🔥"),
-        ("Overload", "过载", 1, "⚙️"),
-        ("Offline", "离线", 2, "📡"),
-        ("LowPressure", "低压", 3, "💧"),
+        ("Overheat", "过热", 0, Lucide.Flame),
+        ("Overload", "过载", 1, Lucide.Cog),
+        ("Offline", "离线", 2, Lucide.WifiOff),
+        ("LowPressure", "低压", 3, Lucide.Droplet),
     ];
 
     /// <summary>当前亮着的灯（枚举名）。</summary>
@@ -49,8 +49,6 @@
     ];
 
     static readonly Attrs PanelLayer = new() { Sx = Panel };
-    static readonly Attrs EmojiOn = new() { Sx = EmojiLit };
-    static readonly Attrs EmojiOff = new() { Sx = EmojiDim };
     static readonly Attrs BitLayer = new() { Sx = BitStyle };
 
     static Style Panel => Css.Define(static () => new Style { Display = Display.Grid, GridTemplateColumns = "repeat(auto-fit, minmax(8.5rem, 1fr))", Gap = Space.Md });
@@ -87,10 +85,10 @@
 
     static Style LitInfo => Css.Define(static () => new Style { BackgroundColor = Tones.Info.Soft, Color = Tones.Info.Text, BoxShadow = $"0 0 18px {Tones.Info.Solid}" });
 
-    static Style EmojiLit => Css.Define(static () => new Style { FontSize = CssLength.Rem(2) });
+    static Style IconLit => Css.Define(static () => new Style { FontSize = CssLength.Rem(2) });
 
-    // 灭着的灯：灰色、半透明
-    static Style EmojiDim => Css.Define(static () => new Style { FontSize = CssLength.Rem(2), Filter = "grayscale(1)", Opacity = 0.45 });
+    // 灭着的灯：半透明
+    static Style IconDim => Css.Define(static () => new Style { FontSize = CssLength.Rem(2), Opacity = 0.4 });
 
     static Style BitStyle => Css.Define(static () => new Style { FontSize = CssLength.Rem(0.75), FontFamily = Fonts.Mono, Opacity = 0.8 });
 }

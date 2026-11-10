@@ -15,12 +15,20 @@
   <div @attributes="Attrs.Merge(ColumnLayer)">
     <div @attributes="Attrs.Merge(StageLayer)">
         <div @attributes="Attrs.Merge(FrameLayer)">
-            <Strong>🏠 调用方（Main）</Strong>
+            <IconLabel Icon="Lucide.House">调用方（Main）</IconLabel>
             <Slot Name="n" Data="@Current.CallerValue" Changed="@Current.CallerChanged" />
         </div>
-        <div @attributes="Attrs.Merge(ArrowLayer)" aria-hidden="true">@Current.Link</div>
+        <div @attributes="Attrs.Merge(ArrowLayer)" aria-hidden="true">
+        @if (Current.Link.Length > 0)
+        {
+            <Flex Direction="LayoutDirection.Column" Align="ItemAlign.Center" Gap="SpaceScale.Xs">
+                <Icon Data="@(Mode == "value" ? Lucide.Copy : Lucide.Link)" />
+                <span>@Current.Link</span>
+            </Flex>
+        }
+    </div>
         <div @attributes="Attrs.Merge(Current.MethodValue is null ? FrameDimLayer : FrameLayer)">
-            <Strong>🔧 方法（@MethodName）</Strong>
+            <IconLabel Icon="Lucide.Wrench">方法（@MethodName）</IconLabel>
             @if (Current.MethodValue is null)
             {
                 <Small Tone="TextTone.Muted">@(step == 0 ? "还没有被调用" : "已经返回：方法里的参数 p 随之销毁")</Small>
@@ -32,7 +40,7 @@
         </div>
     </div>
 
-    <Narration @key="@($"{Mode}{step}")" Emoji="@Current.Emoji">
+    <Narration @key="@($"{Mode}{step}")" Mood="@Current.Emoji">
         <strong>第 @(step + 1) / @steps.Length 步：@Current.Title。</strong> @((MarkupString)Current.Text)
     </Narration>
 
@@ -82,21 +90,21 @@
         "ref" =>
         [
             new("准备", "5", "1", false, null, false, "", "🧍", "调用方有一个变量 n，值是 1。"),
-            new("调用 Add10(ref n)", "6", "1", false, "n 的别名", false, "🔗 同一个盒子", "🔗", "关键词 ref：<strong>不复制</strong>。p 不是新盒子，它是 n 这个盒子的另一个名字（别名）。调用和声明处都必须写 ref，让读代码的人一眼看出\"这个变量会被改\"。"),
-            new("执行 p += 10", "3", "11", true, "n = 11", true, "🔗 同一个盒子", "✏️", "p += 10 改的就是 n 这个盒子，所以左边的 n 同时变成了 11。"),
+            new("调用 Add10(ref n)", "6", "1", false, "n 的别名", false, "同一个盒子", "🔗", "关键词 ref：<strong>不复制</strong>。p 不是新盒子，它是 n 这个盒子的另一个名字（别名）。调用和声明处都必须写 ref，让读代码的人一眼看出\"这个变量会被改\"。"),
+            new("执行 p += 10", "3", "11", true, "n = 11", true, "同一个盒子", "✏️", "p += 10 改的就是 n 这个盒子，所以左边的 n 同时变成了 11。"),
             new("方法返回", "6", "11", false, null, false, "", "🏁", "别名 p 消失了，但修改留了下来：n 现在是 11。要用 ref，n 在调用前必须已经有值。"),
         ],
         "out" =>
         [
             new("准备", "5", "（未赋值）", false, null, false, "", "🧍", "n 声明了但没有赋值。普通传参不允许这样，out 允许，因为方法保证会给它一个值。"),
-            new("调用 Make(out n)", "6", "（未赋值）", false, "（空，等着赋值）", false, "🔗 同一个盒子", "🔗", "关键词 out：p 是 n 的别名，而且一开始是<strong>空的</strong>。方法必须在返回之前给 p 赋值，否则编译不过。"),
-            new("执行 p = 42", "3", "42", true, "n = 42", true, "🔗 同一个盒子", "✏️", "给 p 赋值，就是给 n 赋值，左边的 n 一下子有值了。"),
+            new("调用 Make(out n)", "6", "（未赋值）", false, "（空，等着赋值）", false, "同一个盒子", "🔗", "关键词 out：p 是 n 的别名，而且一开始是<strong>空的</strong>。方法必须在返回之前给 p 赋值，否则编译不过。"),
+            new("执行 p = 42", "3", "42", true, "n = 42", true, "同一个盒子", "✏️", "给 p 赋值，就是给 n 赋值，左边的 n 一下子有值了。"),
             new("方法返回", "6", "42", false, null, false, "", "🏁", "n 拿到了方法\"输出\"的 42。这就是 int.TryParse(text, out var n) 同时返回\"是否成功\"和\"解析结果\"的原理。"),
         ],
         _ =>
         [
             new("准备", "5", "1", false, null, false, "", "🧍", "调用方有一个变量 n，值是 1。"),
-            new("调用 Add10(n)", "6", "1", false, "1", false, "📄 复制一份 ➜", "📄", "默认是<strong>按值传递</strong>：把 n 的值复制一份交给参数 p。p 是一个全新的盒子，和 n 没有任何关系。"),
+            new("调用 Add10(n)", "6", "1", false, "1", false, "复制一份", "📄", "默认是<strong>按值传递</strong>：把 n 的值复制一份交给参数 p。p 是一个全新的盒子，和 n 没有任何关系。"),
             new("执行 p += 10", "3", "1", false, "11", true, "（互不相干）", "✏️", "p += 10 改的是复印件 p，左边的 n 还是 1。"),
             new("方法返回", "6", "1", false, null, false, "", "🏁", "副本 p 随方法一起丢掉了。n 从头到尾没变，还是 1。想让方法改到 n，就要用 ref（或 out）。"),
         ],

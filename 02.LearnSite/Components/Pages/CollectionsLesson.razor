@@ -70,11 +70,11 @@
                         <Small Tone="TextTone.Muted">（空）</Small>
                     }
                 </Flex>
-                <Narration @key="@result" Emoji="@(resultBad ? "💥" : "📦")">@result</Narration>
+                <Narration @key="@result" Mood="@(resultBad ? "💥" : "📦")">@result</Narration>
             </Stage>
             <Side>
                 <CodeBlock Code="@PlaygroundCode" Lang="csharp" Title="你刚才执行的代码" Copyable="false" />
-                <Narration @key="kind" Emoji="🧭">@((MarkupString)KindAdvice)</Narration>
+                <Narration @key="kind" Mood="🧭">@((MarkupString)KindAdvice)</Narration>
                 <Quiz Question="Dictionary 里没有这个键时，dict[“Missing”] 会怎样？" Options="@(new[] { "返回 null", "返回 0", "抛出 KeyNotFoundException" })" Answer="2"
                       Explain="直接用索引取不存在的键会抛异常。不确定键在不在时，用 TryGetValue（返回 bool + out 值）或 GetValueOrDefault。" />
             </Side>
@@ -101,7 +101,7 @@
             </Stage>
             <Side>
                 <CodeBlock Code="@RingCode" Lang="csharp" Copyable="false" />
-                <Narration @key="ringNext" Emoji="🔄">
+                <Narration @key="ringNext" Mood="🔄">
                     容量固定为 3，写满以后<strong>覆盖最旧的</strong>，内存不会无限增长——串口源源不断地收数据，只保留最近的一批，就用它。
                     关键是 <Code>_next = (_next + 1) % 容量</Code>：下标走到末尾后用取余绕回 0。注意数组里的顺序<strong>不是</strong>时间顺序，所以取出来时要从 <Code>_next</Code> 开始绕一圈。
                 </Narration>
@@ -154,7 +154,7 @@
             case "Add": list.Add(n); highlight = $"[{list.Count - 1}]"; Log($"list.Add({n});", $"追加到末尾，Count = {list.Count}"); result = $"追加了 {n}，放在末尾。"; break;
             case "Insert": list.Insert(0, n); highlight = "[0]"; Log($"list.Insert(0, {n});", "插到最前面，后面的整体后移"); result = $"插入到下标 0，原来的元素都往后挪了一位（所以 Insert 比 Add 慢）。"; break;
             case "RemoveAt":
-                if (list.Count == 0) { resultBad = true; Log("list.RemoveAt(0);", "💥 抛出 ArgumentOutOfRangeException"); result = "列表是空的，RemoveAt(0) 抛出了 ArgumentOutOfRangeException。"; }
+                if (list.Count == 0) { resultBad = true; Log("list.RemoveAt(0);", "抛出 ArgumentOutOfRangeException"); result = "列表是空的，RemoveAt(0) 抛出了 ArgumentOutOfRangeException。"; }
                 else { var removed = list[0]; list.RemoveAt(0); Log("list.RemoveAt(0);", $"删掉了 {removed}"); result = $"删掉了下标 0 的 {removed}，后面的整体前移。"; }
                 break;
             case "Contains": var has = list.Contains(3); Log("list.Contains(3);", has.ToString()); result = has ? "有 3。" : "没有 3。"; break;
@@ -164,7 +164,7 @@
             case "TryMissing": var ok = dict.TryGetValue("Missing", out var missing); Log("dict.TryGetValue(\"Missing\", out var missing);", $"{ok}, missing = {missing}"); result = "没找到：返回 false，missing 是默认值 0，不会抛异常。"; break;
             case "DirectMissing":
                 try { _ = dict["Missing"]; }
-                catch (KeyNotFoundException) { resultBad = true; Log("var v = dict[\"Missing\"];", "💥 抛出 KeyNotFoundException"); result = "直接用索引取不存在的键：抛出了 KeyNotFoundException。不确定在不在，就用 TryGetValue。"; }
+                catch (KeyNotFoundException) { resultBad = true; Log("var v = dict[\"Missing\"];", "抛出 KeyNotFoundException"); result = "直接用索引取不存在的键：抛出了 KeyNotFoundException。不确定在不在，就用 TryGetValue。"; }
                 break;
 
             case "AddNew": var added = set.Add(n); highlight = "元素"; Log($"set.Add({n});", added.ToString()); result = $"{n} 是新元素：加进去了，返回 true。"; break;
@@ -173,7 +173,7 @@
 
             case "Enqueue": var command = $"命令{n}"; queue.Enqueue(command); highlight = queue.Count == 1 ? "队首" : $"第 {queue.Count} 个"; Log($"queue.Enqueue(\"{command}\");", "排到队尾"); result = $"{command} 排到了队尾。"; break;
             case "Dequeue":
-                if (queue.Count == 0) { resultBad = true; Log("queue.Dequeue();", "💥 抛出 InvalidOperationException"); result = "队列是空的，Dequeue 抛出了 InvalidOperationException。不确定时用 TryDequeue。"; }
+                if (queue.Count == 0) { resultBad = true; Log("queue.Dequeue();", "抛出 InvalidOperationException"); result = "队列是空的，Dequeue 抛出了 InvalidOperationException。不确定时用 TryDequeue。"; }
                 else { var first = queue.Dequeue(); Log("queue.Dequeue();", $"取出 \"{first}\""); result = $"从队首取出 \"{first}\"：先进先出，最早排进来的最先出去。"; }
                 break;
         }

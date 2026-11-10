@@ -44,7 +44,7 @@
             </Stage>
             <Side>
                 <CodeBlock Code="@PipelineCode" Lang="csharp" Copyable="false" />
-                <Narration @key="@string.Join(',', stages)" Emoji="🏭">
+                <Narration @key="@string.Join(',', stages)" Mood="🏭">
                     每个方法接收上一站的结果、产出新的结果，<strong>原数据不会被改动</strong>。Where 决定留谁，OrderBy 决定顺序，Select 决定每一项变成什么，Take 决定要几个。
                     顺序有讲究：先 Where 再 Select，比先 Select 再 Where 少处理很多数据。
                 </Narration>
@@ -79,7 +79,7 @@
             </Stage>
             <Side>
                 <CodeBlock @key="aggregate" Code="@AggregateCode" Lang="csharp" Copyable="false" />
-                <Narration Emoji="📊">
+                <Narration Mood="📊">
                     <Code>GroupBy</Code> 把集合按某个键分成若干组，每组再用 <Code>Sum / Count / Max</Code> 汇总。
                     .NET 9 还新增了 <Code>CountBy</Code>、<Code>AggregateBy</Code>，一步完成“分组计数/分组聚合”。
                     <Code>First</Code> 找不到会抛异常，<Code>FirstOrDefault</Code> 找不到返回 null/默认值。
@@ -114,7 +114,7 @@
             </Stage>
             <Side>
                 <CodeBlock Code="@LazyCode" Lang="csharp" Title="你刚才执行的代码" Copyable="false" />
-                <Narration @key="@lazyNote" Emoji="🐢">@((MarkupString)lazyNote)</Narration>
+                <Narration @key="@lazyNote" Mood="🐢">@((MarkupString)lazyNote)</Narration>
                 <Quiz Question="query.Count() 再 query.Any()（query 没有 ToList），谓词一共被调用了几次？（订单 1 的数量 > 1）" Options="@(new[] { "5 次", "6 次", "10 次" })" Answer="1"
                       Explain="Count 要遍历全部 5 个 = 5 次；Any 遇到第一个满足的就停（订单 1 就满足）= 1 次；一共 6 次。每次遍历都重新计算，所以要多次使用同一个查询的结果时，先 ToList()。" />
             </Side>

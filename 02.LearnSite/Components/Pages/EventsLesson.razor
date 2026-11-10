@@ -30,7 +30,7 @@
                             <Slot Name="输入" Data="@n.ToString()" />
                         }
                     </Flex>
-                    <div @attributes="Attrs.Merge(Funnel)"><span aria-hidden="true">⬇</span> 每个都交给 <span @attributes="Attrs.Merge(Chip)"><Code>@Current.Label</Code></span> 处理 <span aria-hidden="true">⬇</span></div>
+                    <div @attributes="Attrs.Merge(Funnel)"><Icon Data="Lucide.ArrowDown" /> 每个都交给 <span @attributes="Attrs.Merge(Chip)"><Code>@Current.Label</Code></span> 处理</div>
                     <Flex Gap="SpaceScale.Md" Wrap="true">
                         @foreach (var n in numbers)
                         {
@@ -41,7 +41,7 @@
             </Stage>
             <Side>
                 <CodeBlock Code="@FunctionCode" Lang="csharp" Copyable="false" />
-                <Narration @key="function" Emoji="🧩">
+                <Narration @key="function" Mood="🧩">
                     <Code>Apply</Code> 只负责"挨个取出来、交给你传进来的方法处理"，<strong>怎么处理由调用方决定</strong>。
                     换一个 Lambda，同一个 <Code>Apply</Code> 就做完全不同的事——这就是委托的意义，LINQ 的 <Code>Select</Code>、<Code>Where</Code> 也是这么工作的。
                 </Narration>

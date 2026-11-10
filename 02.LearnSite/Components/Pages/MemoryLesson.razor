@@ -14,7 +14,7 @@
         <Code>class</Code>、数组 这类<strong>引用类型</strong>，变量里装的是"指向对象的地址"，赋值只是多了一个指向同一个对象的地址。
     </Intro>
     <ChildContent>
-        <Narration Emoji="📄">
+        <Narration Mood="📄">
             打个比方：<strong>值类型 = 复印一份文件</strong>，你在复印件上涂改，原件不受影响；
             <strong>引用类型 = 给同一份在线文档发一个链接</strong>，谁通过链接修改，所有人看到的都变了。
         </Narration>
@@ -33,11 +33,11 @@
                             <Slot Name="s1（原件）" Data="@($"X = {s1X}")" />
                             @if (structCopied)
                             {
-                                <span aria-hidden="true">📄 ➜ 📄</span>
+                                <Flex Align="ItemAlign.Center" Gap="SpaceScale.Xs"><Icon Data="Lucide.FileText" /><Icon Data="Lucide.ArrowRight" /><Icon Data="Lucide.FileText" /></Flex>
                                 <Slot Name="s2（复印件）" Data="@($"X = {s2X}")" Changed="@(s2X != s1X)" />
                             }
                         </Flex>
-                        <Narration @key="@($"{structCopied}{s2X}")" Emoji="@StructNote.Emoji">@StructNote.Text</Narration>
+                        <Narration @key="@($"{structCopied}{s2X}")" Mood="@StructNote.Emoji">@StructNote.Text</Narration>
                     </Flex>
                 </ChildContent>
             </Card>
@@ -52,7 +52,7 @@
                             <Button Variant="ButtonVariant.Ghost" Tone="Tone.Neutral" @onclick="ResetClass">重来</Button>
                         </Flex>
                         <RefDiagram SecondReference="classCopied" ObjectData="@($"X = {objectX}")" ObjectChanged="@(objectX != 1)" />
-                        <Narration @key="@($"{classCopied}{objectX}")" Emoji="@ClassNote.Emoji">@ClassNote.Text</Narration>
+                        <Narration @key="@($"{classCopied}{objectX}")" Mood="@ClassNote.Emoji">@ClassNote.Text</Narration>
                     </Flex>
                 </ChildContent>
             </Card>

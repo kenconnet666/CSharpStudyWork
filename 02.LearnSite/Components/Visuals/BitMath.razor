@@ -33,7 +33,7 @@
     @if (Op is "shl" or "shr")
     {
         var dropped = Dropped();
-        <Narration @key="@($"{Op}{Shift}{A}")" Emoji="✂️">
+        <Narration @key="@($"{Op}{Shift}{A}")" Mood="✂️">
             @if (Op == "shl")
             {
                 <span>整体向<strong>左</strong>平移 @Shift 位。左边掉出去的位：<Code>@dropped</Code>；右边补进来的位：<Code>@(new string('0', Shift))</Code>。</span>

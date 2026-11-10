@@ -21,7 +21,7 @@
             </Grid>
         }
         <div @attributes="Attrs.Merge(ConsoleLayer)">
-            <span @attributes="Attrs.Merge(ConsoleTitle)">🖥 控制台输出</span>
+            <IconLabel Icon="Lucide.Terminal">控制台输出</IconLabel>
             @if (Current.Console.Length == 0)
             {
                 <span @attributes="Attrs.Merge(ConsoleTitle)">（还没有输出）</span>
@@ -31,7 +31,7 @@
                 <span @key="@($"{step}{line}")">@line</span>
             }
         </div>
-        <Narration @key="@($"{Title}{step}")" Emoji="@Current.Emoji">
+        <Narration @key="@($"{Title}{step}")" Mood="@Current.Emoji">
             <strong>第 @(step + 1) / @Steps.Count 步：@Current.Title。</strong> @((MarkupString)Current.Text)
         </Narration>
         <Flex Gap="SpaceScale.Sm" Wrap="true">

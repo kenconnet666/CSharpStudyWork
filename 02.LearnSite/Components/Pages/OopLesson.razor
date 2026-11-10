@@ -33,7 +33,7 @@
             </Stage>
             <Side>
                 <CodeBlock Code="@DeviceCode" Lang="csharp" Copyable="false" />
-                <Narration @key="lastCall" Emoji="🎭">
+                <Narration @key="lastCall" Mood="🎭">
                     @if (lastCall == "")
                     {
                         <span>点上面的按钮：同一行 <Code>d.Connect()</Code>，运行时会<strong>根据对象的真实类型</strong>找到各自的实现。</span>
@@ -71,7 +71,7 @@
             </Stage>
             <Side>
                 <CodeBlock Code="@OverrideCode" Lang="csharp" Copyable="false" />
-                <Narration Emoji="🔬">
+                <Narration Mood="🔬">
                     <strong>virtual + override</strong>：看<strong>对象的真实类型</strong>（Derived），不管变量声明成什么，结果都是 Derived 的版本——这是真正的多态。
                     <strong>new</strong>：只是子类又定义了一个<strong>同名的新方法</strong>把父类的遮住，调用哪个看<strong>变量的声明类型</strong>——Base 变量调到父类的，Derived 变量调到子类的。
                     实际写代码几乎不用 new 隐藏方法，容易造成困惑；知道区别、会读别人的代码即可。
@@ -101,7 +101,7 @@
             </Stage>
             <Side>
                 <CodeBlock Code="@PollingCode" Lang="csharp" Copyable="false" />
-                <Narration @key="clientKey" Emoji="🔌">
+                <Narration @key="clientKey" Mood="🔌">
                     <Code>PollingService</Code> 只认识 <Code>IPlcClient</Code> 这个<strong>接口</strong>，不知道背后是 S7、Modbus 还是模拟器。
                     以后接入新协议，只要再写一个实现接口的类，<Code>PollingService</Code> 和界面代码一行都不用改。
                     经验：优先"组合 + 接口"，继承层级别超过两三层。

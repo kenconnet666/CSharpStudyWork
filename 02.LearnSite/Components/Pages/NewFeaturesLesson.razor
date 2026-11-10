@@ -28,7 +28,7 @@
             </Stage>
             <Side>
                 <CodeBlock Code="@FieldCode" Lang="csharp" Copyable="false" />
-                <Narration Emoji="🫥">
+                <Narration Mood="🫥">
                     以前给属性加校验，必须自己声明一个私有字段（<Code>_name</Code>）再手写 get/set。现在 <Code>field</Code> 直接代表编译器生成的那个隐藏字段，
                     <Code>set => field = value.Trim();</Code> 一行搞定，不用再起名字。
                 </Narration>
@@ -54,7 +54,7 @@
             </Stage>
             <Side>
                 <CodeBlock Code="@ExtensionCode" Lang="csharp" Copyable="false" />
-                <Narration Emoji="🧰">
+                <Narration Mood="🧰">
                     给别人写的类型（比如 <Code>string</Code>）"加功能"，以前只能写扩展<strong>方法</strong>。<Code>extension(string source) &#123; ... &#125;</Code> 这种扩展块里，
                     可以写<strong>属性</strong>（<Code>IsBlank</Code>），用 <Code>extension(string)</Code> 还能加<strong>静态成员</strong>（<Code>string.Repeat</Code>）。
                 </Narration>
@@ -79,7 +79,7 @@
             </Stage>
             <Side>
                 <CodeBlock Code="@NullAssignCode" Lang="csharp" Copyable="false" />
-                <Narration @key="@assignNote" Emoji="🛡️">@assignNote</Narration>
+                <Narration @key="@assignNote" Mood="🛡️">@assignNote</Narration>
             </Side>
         </Demo>
 
@@ -101,10 +101,10 @@
             </Stage>
             <Side>
                 <CodeBlock Code="@CollectionCode" Lang="csharp" Copyable="false" />
-                <Narration Emoji="📚">
+                <Narration Mood="📚">
                     <Code>[ ... ]</Code> 统一创建数组、<Code>List</Code>、<Code>Span</Code> 等，具体是什么由左边的类型决定；<Code>..x</Code> 把另一个集合的元素<strong>展开</strong>进来（和 JS 的 <Code>...x</Code> 一样）。
                 </Narration>
-                <Quiz Question="List&lt;int&gt; r = [0, ..a, 99]; 其中 a = [1, 2]，结果是？" Options="@(new[] { "[0, [1, 2], 99]", "[0, 1, 2, 99]" })" Answer="1"
+                <Quiz Question="List<int> r = [0, ..a, 99]; 其中 a = [1, 2]，结果是？" Options="@(new[] { "[0, [1, 2], 99]", "[0, 1, 2, 99]" })" Answer="1"
                       Explain=".. 是展开：把 a 里的元素一个个放进来，而不是把 a 当成一个元素。" />
             </Side>
         </Demo>

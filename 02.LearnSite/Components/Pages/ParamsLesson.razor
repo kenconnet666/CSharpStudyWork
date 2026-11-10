@@ -34,7 +34,7 @@
             <Stage>
                 <Flex Gap="SpaceScale.Lg" Align="ItemAlign.Center" Wrap="true">
                     <Slot Name="a" Data="@a.ToString()" Changed="@swapped" />
-                    <span aria-hidden="true">⇄</span>
+                    <Icon Data="Lucide.ArrowLeftRight" />
                     <Slot Name="b" Data="@b.ToString()" Changed="@swapped" />
                 </Flex>
                 <Flex Gap="SpaceScale.Sm" Wrap="true">
@@ -42,7 +42,7 @@
                     <Button Icon="Lucide.Repeat" @onclick="SwapByRef">Swap(ref a, ref b)</Button>
                     <Button Variant="ButtonVariant.Ghost" Tone="Tone.Neutral" @onclick="ResetSwap">重来</Button>
                 </Flex>
-                <Narration @key="@swapNote" Emoji="@(swapNote.Contains('✅') ? "🔁" : "🙅")">@swapNote</Narration>
+                <Narration @key="@swapNote" Mood="@(swapOk ? "🔁" : "🙅")">@swapNote</Narration>
             </Stage>
             <Side>
                 <CodeBlock Code="@SwapCode" Lang="csharp" Copyable="false" />
@@ -67,7 +67,7 @@
             </Stage>
             <Side>
                 <CodeBlock Code="@TryParseCode" Lang="csharp" Copyable="false" />
-                <Narration Emoji="🧯">
+                <Narration Mood="🧯">
                     <Code>TryParse</Code> 用<strong>返回值</strong>告诉你成不成功，用 <Code>out</Code> 参数把<strong>结果</strong>送出来，失败时不抛异常，
                     所以解析用户输入、串口收到的文本，一律用它；<Code>int.Parse</Code> 遇到不能解析的文字会直接抛异常。
                 </Narration>
@@ -107,7 +107,8 @@
     int a = 1;
     int b = 2;
     bool swapped;
-    string swapNote = "👆 两种调用都试试，看 a、b 有没有变。";
+    string swapNote = "两种调用都试试，看 a、b 有没有变。";
+    bool swapOk;
     string swapCode = "";
 
     string SwapCode => string.Join("\n",
@@ -118,7 +119,8 @@
     void SwapByValue()
     {
         swapCode = "\nSwap(a, b);        // a、b 没变";
-        swapNote = "🙅 没有交换：x、y 是 a、b 的复印件，方法里换的是复印件，用完就丢，a 和 b 原封不动。";
+        swapOk = false;
+        swapNote = "没有交换：x、y 是 a、b 的复印件，方法里换的是复印件，用完就丢，a 和 b 原封不动。";
     }
 
     void SwapByRef()
@@ -126,7 +128,8 @@
         (a, b) = (b, a);
         swapped = !swapped;
         swapCode = "\nSwap(ref a, ref b);   // a、b 真的换了";
-        swapNote = "✅ 交换成功：ref 让 x、y 成为 a、b 的别名，方法里换 x、y 就是在换 a、b。再点一次会换回来。";
+        swapOk = true;
+        swapNote = "交换成功：ref 让 x、y 成为 a、b 的别名，方法里换 x、y 就是在换 a、b。再点一次会换回来。";
     }
 
     void ResetSwap()
@@ -135,7 +138,8 @@
         b = 2;
         swapped = false;
         swapCode = "";
-        swapNote = "👆 两种调用都试试，看 a、b 有没有变。";
+        swapNote = "两种调用都试试，看 a、b 有没有变。";
+        swapOk = false;
     }
 
     // ---- 演示 3：TryParse ----

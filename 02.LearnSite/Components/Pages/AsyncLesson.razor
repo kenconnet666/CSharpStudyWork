@@ -59,7 +59,7 @@
             </Stage>
             <Side>
                 <CodeBlock @key="@("modecode" + mode)" Code="@ModeCode" Lang="csharp" Copyable="false" />
-                <Narration @key="@note" Emoji="@(string.IsNullOrEmpty(note) ? "▶️" : "⏱️")">@((MarkupString)(string.IsNullOrEmpty(note) ? "选一种写法，点“运行”：横条是<strong>真实</strong>的执行过程，不是动画。" : note))</Narration>
+                <Narration @key="@note" Mood="@(string.IsNullOrEmpty(note) ? "▶️" : "⏱️")">@((MarkupString)(string.IsNullOrEmpty(note) ? "选一种写法，点“运行”：横条是<strong>真实</strong>的执行过程，不是动画。" : note))</Narration>
                 <Quiz Question="三个任务各 500、300、700 毫秒，用 Task.WhenAll 同时开始，总共大约多久？" Options="@(new[] { "1500 ms", "700 ms", "300 ms" })" Answer="1"
                       Explain="同时开始，要等最慢的那个结束，所以总耗时 ≈ 最慢的 700 ms。依次 await 才是 500 + 300 + 700 = 1500 ms。" />
             </Side>
@@ -90,7 +90,7 @@
             </Stage>
             <Side>
                 <CodeBlock @key="@("code" + uiMode)" Code="@UiCode" Lang="csharp" Copyable="false" />
-                <Narration @key="@("note" + uiMode)" Emoji="@UiNote.Emoji">@((MarkupString)UiNote.Text)</Narration>
+                <Narration @key="@("note" + uiMode)" Mood="@UiNote.Emoji">@((MarkupString)UiNote.Text)</Narration>
                 <Quiz Question="async void 应该用在哪里？" Options="@(new[] { "任何异步方法", "只用在事件处理器（如 Click）", "永远不要用" })" Answer="1"
                       Explain="async void 的异常无法被调用方捕获，也没法 await，所以只用于事件处理器这种“没有返回值的入口”；其他地方一律返回 Task。" />
             </Side>
@@ -305,9 +305,9 @@
 
     string UiCode => uiMode switch
     {
-        "block" => "// 按钮的 Click 处理器（运行在 UI 线程）\nvoid Button_Click(object sender, EventArgs e)\n{\n    var value = ReadDeviceAsync().Result;   // ❌ 阻塞 UI 线程，界面卡死，甚至死锁\n    label.Text = value.ToString();\n}",
-        "await" => "// 处理器自己改成 async void（事件处理器是 async void 的唯一合理场合）\nasync void Button_Click(object sender, EventArgs e)\n{\n    var value = await ReadDeviceAsync();   // ✅ 等待时 UI 线程是空闲的\n    label.Text = value.ToString();         // await 之后自动回到 UI 线程，可以直接改控件\n}",
-        _ => "async void Button_Click(object sender, EventArgs e)\n{\n    // 耗 CPU 的同步计算丢到线程池，不占 UI 线程\n    var crc = await Task.Run(() => ComputeCrc(hugeBuffer));   // ✅\n    label.Text = crc.ToString();\n}",
+        "block" => "// 按钮的 Click 处理器（运行在 UI 线程）\nvoid Button_Click(object sender, EventArgs e)\n{\n    var value = ReadDeviceAsync().Result;   // 错误：阻塞 UI 线程，界面卡死，甚至死锁\n    label.Text = value.ToString();\n}",
+        "await" => "// 处理器自己改成 async void（事件处理器是 async void 的唯一合理场合）\nasync void Button_Click(object sender, EventArgs e)\n{\n    var value = await ReadDeviceAsync();   // 推荐：等待时 UI 线程是空闲的\n    label.Text = value.ToString();         // await 之后自动回到 UI 线程，可以直接改控件\n}",
+        _ => "async void Button_Click(object sender, EventArgs e)\n{\n    // 耗 CPU 的同步计算丢到线程池，不占 UI 线程\n    var crc = await Task.Run(() => ComputeCrc(hugeBuffer));   // 推荐\n    label.Text = crc.ToString();\n}",
     };
 
     (string Emoji, string Text) UiNote => uiMode switch

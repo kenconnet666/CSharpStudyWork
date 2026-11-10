@@ -25,7 +25,7 @@
         </svg>
 
         <div style="position:absolute;left:8px;top:100px;width:162px">
-            <Slot Name="📡 串口（发布者）" Data="DataReceived 事件" Changed="@(subscribed.Count > 0)" />
+            <Slot Name="串口（发布者）" Data="DataReceived 事件" Changed="@(subscribed.Count > 0)" />
         </div>
 
         @foreach (var sub in subs)
@@ -41,7 +41,7 @@
         {
             var sub = subs.First(s => s.Id == id);
             <div @key="@($"pulse{pulse}{id}")" style="position:absolute;left:170px;top:116px;--dx:@(206)px;--dy:@(sub.Top - 100)px">
-                <span @attributes="Attrs.Merge(Letter)" aria-hidden="true">✉️</span>
+                <Icon Data="Lucide.Mail" Sx="LetterStyle" />
             </div>
         }
     </div>
@@ -61,7 +61,7 @@
     </Flex>
 </div>
 <div @attributes="Attrs.Merge(ColumnLayer)">
-    <Narration @key="@note" Emoji="@emoji">@((MarkupString)note)</Narration>
+    <Narration @key="@note" Mood="@emoji">@((MarkupString)note)</Narration>
     <CodeBlock Code="@DefinitionCode" Lang="csharp" Title="发布方：事件怎么定义、怎么触发" Copyable="false" />
     <CodeBlock Code="@ExecutedCode" Lang="csharp" Title="你刚才执行的代码" Copyable="false" />
 </div>
@@ -161,7 +161,6 @@
 
     static Style Column => Css.Define(static () => new Style { Display = Display.Flex, FlexDirection = FlexDirection.Column, Gap = Space.Md, MinWidth = 0 });
 
-    static readonly Attrs Letter = new() { Sx = LetterStyle };
 
     static Style LetterStyle => Css.Define(static () => new Style
     {

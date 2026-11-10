@@ -9,7 +9,7 @@
 
 <div @attributes="Attrs.Merge(StageLayer)">
     <div @attributes="Attrs.Merge(SideLayer)">
-        <Strong>📤 发送方（@(SenderBig ? "大端" : "小端")）</Strong>
+        <IconLabel Icon="Lucide.Send">发送方（@(SenderBig ? "大端" : "小端")）</IconLabel>
         <ByteCells Bytes="wire" Ranks="SenderRanks" />
     </div>
 
@@ -28,7 +28,7 @@
     </div>
 
     <div @attributes="Attrs.Merge(SideLayer)">
-        <Strong>📥 接收方（@(ReceiverBig ? "大端" : "小端")）</Strong>
+        <IconLabel Icon="Lucide.Inbox">接收方（@(ReceiverBig ? "大端" : "小端")）</IconLabel>
         @if (received.Count == 0)
         {
             <Small Tone="TextTone.Muted">还没收到任何字节</Small>
@@ -45,7 +45,7 @@
     @if (received.Count == wire.Length && wire.Length > 0)
     {
         var rebuilt = Rebuild();
-        <Narration @key="@($"{SenderBig}{ReceiverBig}{Value}")" Emoji="@(rebuilt == Value ? "✅" : "❌")">
+        <Narration @key="@($"{SenderBig}{ReceiverBig}{Value}")" Mood="@(rebuilt == Value ? "✅" : "❌")">
             @if (rebuilt == Value)
             {
                 <span>接收方拼出 <Code>@("0x" + rebuilt.ToString("X" + Size * 2))</Code>，和发送的数一样。双方字节序一致，读对了。</span>

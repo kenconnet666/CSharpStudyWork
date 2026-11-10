@@ -1,43 +1,32 @@
 @*
-    解说气泡：一个表情 + 一两句大白话，告诉你"刚才发生了什么、为什么"。
-    内容变化时气泡会淡入一下（调用方给它 @key 即可），让注意力回到文字上。
+    解说气泡：一两句大白话，告诉你"刚才发生了什么、为什么"。
+    用的是 Rune 的 Alert（提示条），图标是 Lucide，色调随"心情"变：成功绿、出错红、提醒黄、其余蓝。
+    Mood 是一个短键（见 Mood.cs）。内容变化时气泡会淡入一下（调用方给它 @key 即可），让注意力回到文字上。
 *@
 @namespace LearnSite.Components.Visuals
 @inherits RuneComponent
 
-<div @attributes="Attrs.Merge(BoxLayer)">
-    <span @attributes="Attrs.Merge(EmojiLayer)" aria-hidden="true">@Emoji</span>
-    <div>@ChildContent</div>
-</div>
+<Alert Tone="@look.Tone" Icon="@look.Icon" Sx="Appear">@ChildContent</Alert>
 
 @code {
-    /// <summary>左边的表情，如 "💡"、"✂️"。</summary>
-    [Parameter] public string Emoji { get; set; } = "💡";
+    /// <summary>提示的类型键，如 "💡"、"✅"、"💥"，对应的图标和色调见 Mood.cs。</summary>
+    [Parameter] public string Mood { get; set; } = "💡";
 
     /// <summary>解说的文字。</summary>
     [Parameter] public RenderFragment? ChildContent { get; set; }
 
-    static readonly Attrs BoxLayer = new() { Sx = Box };
-    static readonly Attrs EmojiLayer = new() { Sx = EmojiStyle };
+    (IconData Icon, Tone Tone) look => LearnSite.Components.Mood.For(Mood);
 
-    static Style Box => Css.Define(static () => new Style
+    static Style Appear => Css.Define(static () => new Style
     {
-        Display = Display.Flex,
-        AlignItems = AlignItems.Center,
-        Gap = Space.Md,
-        Padding = Space.Md,
-        BorderRadius = Radii.Md,
-        BackgroundColor = Tones.Accent.Soft,
-        Keyframes = Appear,
+        Keyframes = Fade,
         AnimationDuration = "0.3s",
         AnimationTimingFunction = Easings.Enter,
     });
 
-    static Keyframes Appear => Css.Define(static () => new Keyframes
+    static Keyframes Fade => Css.Define(static () => new Keyframes
     {
         ["from"] = new() { Opacity = 0, Transform = "translateY(4px)" },
         ["to"] = new() { Opacity = 1, Transform = "none" },
     });
-
-    static Style EmojiStyle => Css.Define(static () => new Style { FontSize = CssLength.Rem(1.75), LineHeight = 1 });
 }

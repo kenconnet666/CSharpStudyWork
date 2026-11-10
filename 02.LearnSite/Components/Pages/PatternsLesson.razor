@@ -34,7 +34,7 @@
             </Stage>
             <Side>
                 <CodeBlock Code="@FrameCode" Lang="csharp" HighlightLines="@FrameResult.Lines" LineNumbers="true" Copyable="false" />
-                <Narration @key="@FrameResult.Lines" Emoji="🔎">
+                <Narration @key="@FrameResult.Lines" Mood="🔎">
                     <Code>[var unit, 0x03, var ah, ..]</Code> 的意思：第 1 个元素取名 unit，第 2 个必须等于 0x03，接着取 4 个，<Code>..</Code> 吞掉后面任意多个（这里是 CRC）。
                     异常帧的功能码是 <Code>0x83</Code> 这样的数，没法用字面量，所以用 <Code>when</Code> 附加条件。<strong>顺序重要</strong>：先写更具体的分支。
                 </Narration>
@@ -44,7 +44,7 @@
         </Demo>
 
         @* ---------- 演示 2：关系模式 ---------- *@
-        <Demo Title="演示 2：关系模式与逻辑模式（&gt;=、and、or、not）">
+        <Demo Title="演示 2：关系模式与逻辑模式（>=、and、or、not）">
             <Stage>
                 <Field Label="@($"分数 score = {score}")">
                     <Slider TValue="int" @bind-Value="score" Min="0" Max="100" />
@@ -57,7 +57,7 @@
             </Stage>
             <Side>
                 <CodeBlock Code="@GradeCode" Lang="csharp" HighlightLines="@GradeResult.Lines" LineNumbers="true" Copyable="false" />
-                <Narration Emoji="📏">
+                <Narration Mood="📏">
                     <Code>&gt;= 90</Code> 是<strong>关系模式</strong>，<Code>and / or / not</Code> 把模式组合起来：<Code>&gt;= 60 and &lt; 90</Code> 读作"大于等于 60 并且小于 90"。
                     最后的 <Code>_</Code> 是"其他所有情况"，相当于 default。
                 </Narration>
@@ -80,7 +80,7 @@
             </Stage>
             <Side>
                 <CodeBlock Code="@ObjectCode" Lang="csharp" HighlightLines="@ObjectResult.Lines" LineNumbers="true" Copyable="false" />
-                <Narration Emoji="🧩">
+                <Narration Mood="🧩">
                     <Code>int n when n &gt; 40</Code>：类型模式 + 取名 + 附加条件。<Code>string &#123; Length: &gt; 3 &#125; s</Code>：属性模式，检查对象的属性值。
                     <Code>Point(var x, var y)</Code>：位置模式，利用 record 的解构。比一串 <Code>if (obj is int) ... else if ...</Code> 清楚得多。
                 </Narration>
@@ -105,7 +105,7 @@
             </Stage>
             <Side>
                 <CodeBlock Code="@MachineCode" Lang="csharp" HighlightLines="@machineLines" LineNumbers="true" Copyable="false" />
-                <Narration @key="@machineNote" Emoji="🚦">@machineNote</Narration>
+                <Narration @key="@machineNote" Mood="🚦">@machineNote</Narration>
                 <Quiz Question="设备在 Idle 状态收到 Pause 命令，会怎样？" Options="@(new[] { "抛出异常", "状态保持 Idle", "变成 Paused" })" Answer="1"
                       Explain="没有哪条分支匹配 (Idle, Pause)，最后的 _ => state 把当前状态原样返回。把“不合法的转移”统一交给 _ 处理，状态机就不会乱。" />
             </Side>

@@ -34,13 +34,13 @@
             </Stage>
             <Side>
                 <CodeBlock Code="@SingleCode" Lang="csharp" Copyable="false" />
-                <Narration @key="single" Emoji="@SingleNote.Emoji">@SingleNote.Text</Narration>
+                <Narration @key="single" Mood="@SingleNote.Emoji">@SingleNote.Text</Narration>
                 <Quiz Question="0b0000_0110 是多少？" Options="@(new[] { "4", "6", "8", "12" })" Answer="1"
                       Explain="第 1 位（权重 2）和第 2 位（权重 4）是 1，2 + 4 = 6。" />
             </Side>
         </Demo>
 
-        <Demo Title="演示 2：位运算的&quot;竖式&quot;">
+        <Demo Title="演示 2：位运算的“竖式”">
             <Stage>
                 <ToggleGroup @bind-Value="op" Required="true" aria-label="运算">
                     <ToggleItem Value="or">| 或</ToggleItem>
@@ -60,8 +60,8 @@
             </Stage>
             <Side>
                 <CodeBlock Code="@CodeLine" Lang="csharp" Copyable="false" />
-                <Narration @key="op" Emoji="@Rule.Emoji">@Rule.Text</Narration>
-                <Quiz Question="0b1100 &amp; 0b1010 等于多少？" Options="@(new[] { "0b1000", "0b1010", "0b1100", "0b1110" })" Answer="0"
+                <Narration @key="op" Mood="@Rule.Emoji">@Rule.Text</Narration>
+                <Quiz Question="0b1100 & 0b1010 等于多少？" Options="@(new[] { "0b1000", "0b1010", "0b1100", "0b1110" })" Answer="0"
                       Explain="& 要两个位都是 1 才得 1：1100 和 1010 只有最高位同时是 1，所以结果是 1000。" />
             </Side>
         </Demo>
@@ -73,7 +73,7 @@
             </Stage>
             <Side>
                 <CodeBlock Code="@AlarmCode" Lang="csharp" Copyable="false" />
-                <Narration Emoji="📟">
+                <Narration Mood="📟">
                     点一盏灯，状态字节里对应的那一位就翻转：灯亮 = 这一位是 1。设备把 4 个报警塞进<strong>一个字节</strong>发给你，
                     你收到后逐位检查，就知道哪几个报警正在发生。打开一个报警用 <Code>|=</Code>，关闭用 <Code>&amp;= ~</Code>。
                 </Narration>

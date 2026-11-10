@@ -16,7 +16,7 @@
         这就是<strong>字节序</strong>。
     </Intro>
     <ChildContent>
-        <Narration Emoji="📅">
+        <Narration Mood="📅">
             打个比方：同一个日期，中国人写 <strong>2026年11月10日</strong>（从大到小，像<strong>大端</strong>），
             欧洲人写 <strong>10/11/2026</strong>（从小到大，像<strong>小端</strong>）。日期没变，写法不同，
             读的人如果不知道对方的习惯，就会读错。Modbus、西门子 S7 用大端，x86 电脑的内存用小端。
@@ -46,7 +46,7 @@
             </Stage>
             <Side>
                 <CodeBlock Code="@Code" Lang="csharp" Copyable="false" />
-                <Narration @key="@($"{hex}{width}")" Emoji="🎨">
+                <Narration @key="@($"{hex}{width}")" Mood="🎨">
                     看颜色：<strong>同一个字节在两行里颜色相同</strong>（橙色是最高位字节），只是位置反了。
                     大端的内存读起来和我们写数字的顺序一致，小端则是倒过来的。
                 </Narration>
