@@ -1,0 +1,114 @@
+@*
+    参数传递的"单步回放"：左边是调用方的变量 n，右边是被调用的方法里的参数 p，一步一步看数据怎么走。
+      value（默认）：调用时把 n 的值复制一份给 p，改 p 不影响 n
+      ref          ：p 是 n 这个盒子的别名，改 p 就是改 n；调用前 n 必须有值
+      out          ：和 ref 类似，但调用前 n 可以没有值，方法返回前必须给 p 赋值
+    代码块里高亮"当前正在执行的那一行"，右边的解说用大白话说明这一步发生了什么。
+*@
+@namespace LearnSite.Components.Visuals
+@inherits RuneComponent
+
+<Flex Direction="LayoutDirection.Column" Gap="SpaceScale.Md">
+    <CodeBlock @key="Mode" Code="@CurrentCode" Lang="csharp" HighlightLines="@Current.Lines" Copyable="false" />
+
+    <div @attributes="Attrs.Merge(StageLayer)">
+        <div @attributes="Attrs.Merge(FrameLayer)">
+            <Strong>🏠 调用方（Main）</Strong>
+            <Slot Name="n" Data="@Current.CallerValue" Changed="@Current.CallerChanged" />
+        </div>
+        <div @attributes="Attrs.Merge(ArrowLayer)" aria-hidden="true">@Current.Link</div>
+        <div @attributes="Attrs.Merge(Current.MethodValue is null ? FrameDimLayer : FrameLayer)">
+            <Strong>🔧 方法（@MethodName）</Strong>
+            @if (Current.MethodValue is null)
+            {
+                <Small Tone="TextTone.Muted">@(step == 0 ? "还没有被调用" : "已经返回：方法里的参数 p 随之销毁")</Small>
+            }
+            else
+            {
+                <Slot @key="@($"{Mode}{step}")" Name="@PName" Data="@Current.MethodValue" Changed="@Current.MethodChanged" />
+            }
+        </div>
+    </div>
+
+    <Narration @key="@($"{Mode}{step}")" Emoji="@Current.Emoji">
+        <strong>第 @(step + 1) / @steps.Length 步：@Current.Title。</strong> @((MarkupString)Current.Text)
+    </Narration>
+
+    <Flex Gap="SpaceScale.Sm" Wrap="true">
+        <Button Variant="ButtonVariant.Soft" Tone="Tone.Neutral" Disabled="@(step == 0)" @onclick="() => step--">上一步</Button>
+        <Button Disabled="@(step == steps.Length - 1)" @onclick="() => step++">下一步</Button>
+        <Button Variant="ButtonVariant.Ghost" Tone="Tone.Neutral" Disabled="@(step == 0)" @onclick="() => step = 0">重来</Button>
+    </Flex>
+</Flex>
+
+@code {
+    /// <summary>传递方式：value、ref、out。</summary>
+    [Parameter] public string Mode { get; set; } = "value";
+
+    /// <summary>回放的一步：高亮哪几行、两边盒子里是什么、解说什么。</summary>
+    sealed record Step(string Title, string Lines, string CallerValue, bool CallerChanged, string? MethodValue, bool MethodChanged, string Link, string Emoji, string Text);
+
+    int step;
+    string lastMode = "";
+    Step[] steps = [];
+
+    Step Current => steps[Math.Min(step, steps.Length - 1)];
+
+    string MethodName => Mode == "out" ? "Make" : "Add10";
+
+    string PName => Mode == "value" ? "p（n 的副本）" : "p（就是 n）";
+
+    // 切换传递方式时回到第一步并换一组步骤
+    protected override void OnParametersSet()
+    {
+        if (Mode == lastMode) return;
+        lastMode = Mode;
+        step = 0;
+        steps = Build(Mode);
+    }
+
+    string CurrentCode => Mode switch
+    {
+        "ref" => "static void Add10(ref int p)\n{\n    p += 10;\n}\nvar n = 1;\nAdd10(ref n);",
+        "out" => "static void Make(out int p)\n{\n    p = 42;\n}\nint n;\nMake(out n);",
+        _ => "static void Add10(int p)\n{\n    p += 10;\n}\nvar n = 1;\nAdd10(n);",
+    };
+
+    static Step[] Build(string mode) => mode switch
+    {
+        "ref" =>
+        [
+            new("准备", "5", "1", false, null, false, "", "🧍", "调用方有一个变量 n，值是 1。"),
+            new("调用 Add10(ref n)", "6", "1", false, "n 的别名", false, "🔗 同一个盒子", "🔗", "关键词 ref：<strong>不复制</strong>。p 不是新盒子，它是 n 这个盒子的另一个名字（别名）。调用和声明处都必须写 ref，让读代码的人一眼看出\"这个变量会被改\"。"),
+            new("执行 p += 10", "3", "11", true, "n = 11", true, "🔗 同一个盒子", "✏️", "p += 10 改的就是 n 这个盒子，所以左边的 n 同时变成了 11。"),
+            new("方法返回", "6", "11", false, null, false, "", "🏁", "别名 p 消失了，但修改留了下来：n 现在是 11。要用 ref，n 在调用前必须已经有值。"),
+        ],
+        "out" =>
+        [
+            new("准备", "5", "（未赋值）", false, null, false, "", "🧍", "n 声明了但没有赋值。普通传参不允许这样，out 允许，因为方法保证会给它一个值。"),
+            new("调用 Make(out n)", "6", "（未赋值）", false, "（空，等着赋值）", false, "🔗 同一个盒子", "🔗", "关键词 out：p 是 n 的别名，而且一开始是<strong>空的</strong>。方法必须在返回之前给 p 赋值，否则编译不过。"),
+            new("执行 p = 42", "3", "42", true, "n = 42", true, "🔗 同一个盒子", "✏️", "给 p 赋值，就是给 n 赋值，左边的 n 一下子有值了。"),
+            new("方法返回", "6", "42", false, null, false, "", "🏁", "n 拿到了方法\"输出\"的 42。这就是 int.TryParse(text, out var n) 同时返回\"是否成功\"和\"解析结果\"的原理。"),
+        ],
+        _ =>
+        [
+            new("准备", "5", "1", false, null, false, "", "🧍", "调用方有一个变量 n，值是 1。"),
+            new("调用 Add10(n)", "6", "1", false, "1", false, "📄 复制一份 ➜", "📄", "默认是<strong>按值传递</strong>：把 n 的值复制一份交给参数 p。p 是一个全新的盒子，和 n 没有任何关系。"),
+            new("执行 p += 10", "3", "1", false, "11", true, "（互不相干）", "✏️", "p += 10 改的是复印件 p，左边的 n 还是 1。"),
+            new("方法返回", "6", "1", false, null, false, "", "🏁", "副本 p 随方法一起丢掉了。n 从头到尾没变，还是 1。想让方法改到 n，就要用 ref（或 out）。"),
+        ],
+    };
+
+    static readonly Attrs StageLayer = new() { Sx = Stage };
+    static readonly Attrs FrameLayer = new() { Sx = Frame };
+    static readonly Attrs FrameDimLayer = new() { Sx = Sx.Of(Frame, Dim) };
+    static readonly Attrs ArrowLayer = new() { Sx = Arrow };
+
+    static Style Stage => Css.Define(static () => new Style { Display = Display.Grid, GridTemplateColumns = "1fr 9rem 1fr", Gap = Space.Md, AlignItems = AlignItems.Center });
+
+    static Style Frame => Css.Define(static () => new Style { Display = Display.Flex, FlexDirection = FlexDirection.Column, Gap = Space.Sm, Padding = Space.Md, BorderRadius = Radii.Lg, BackgroundColor = Colors.Fill, MinHeight = CssLength.Rem(7) });
+
+    static Style Dim => Css.Define(static () => new Style { Opacity = 0.55 });
+
+    static Style Arrow => Css.Define(static () => new Style { TextAlign = TextAlign.Center, Color = Colors.TextMuted, FontSize = CssLength.Rem(0.85) });
+}
