@@ -1,0 +1,280 @@
+@page "/basics"
+@using System.Globalization
+@inherits RuneComponent
+
+@*
+    语法精讲 1：基础——类型与 var、字符串格式化、空值处理、元组与范围索引。对应 01.CSharpSyntax 第 1 课。
+*@
+
+<LessonPage Title="基础：类型、格式化、空值、范围">
+    <Intro>
+        C# 的基本语法和 Java 非常像，真正需要花时间看的只有几处"不一样"：<Code>var</Code> 是编译期推断、
+        字符串插值能直接带格式、空值有一整套运算符、元组和范围让代码更短。每一项都在下面做成了可以拨动的演示。
+    </Intro>
+    <ChildContent>
+        @* ---------- 演示 1：类型与 var ---------- *@
+        <Demo Title="演示 1：基本类型与 var 推断">
+            <Stage>
+                <ToggleGroup @bind-Value="typeKey" Required="true" aria-label="选一个类型">
+                    @foreach (var t in types)
+                    {
+                        <ToggleItem Value="@t.Key">@t.Key</ToggleItem>
+                    }
+                </ToggleGroup>
+                <Grid MinItemWidth="CssLength.Rem(12)" Gap="SpaceScale.Sm">
+                    <Readout Title="字面量" Value="@CurrentType.Literal" />
+                    <Readout Title="var x = 字面量; 推断出" Value="@CurrentType.ClrName" />
+                    <Readout Title="范围 / 特点" Value="@CurrentType.Range" />
+                    <Readout Title="什么时候用" Value="@CurrentType.Usage" />
+                </Grid>
+                <Strong>整数除法的坑：除数写成什么，结果就是什么类型</Strong>
+                <ToggleGroup @bind-Value="divisor" Required="true" aria-label="除数写法">
+                    <ToggleItem Value="int">7 / 2</ToggleItem>
+                    <ToggleItem Value="double">7 / 2.0</ToggleItem>
+                    <ToggleItem Value="decimal">7m / 2</ToggleItem>
+                </ToggleGroup>
+                <Grid MinItemWidth="CssLength.Rem(12)" Gap="SpaceScale.Sm">
+                    <Readout Title="结果" Value="@DivisionResult" />
+                    <Readout Title="0.1 + 0.2（double）" Value="@((0.1 + 0.2).ToString("R", CultureInfo.InvariantCulture))" />
+                    <Readout Title="0.1m + 0.2m（decimal）" Value="@((0.1m + 0.2m).ToString(CultureInfo.InvariantCulture))" />
+                </Grid>
+            </Stage>
+            <Side>
+                <CodeBlock Code="@TypeCode" Lang="csharp" Copyable="false" />
+                <Narration @key="typeKey" Emoji="🏷️">
+                    <Code>var</Code> 不是 JS 那样的"动态类型"：编译器在<strong>编译时</strong>根据右边推断出一个确定的类型，之后就不能再换了
+                    （<Code>var name = "Rider"; name = 123;</Code> 编译不过）。整数除以整数还是整数，想要小数必须有一边是小数。
+                    <Code>double</Code> 有二进制浮点误差，金额等要精确的场合用 <Code>decimal</Code>。
+                </Narration>
+                <Quiz Question="var count = 7 / 2; 之后 count 是多少？" Options="@(new[] { "3", "3.5", "4" })" Answer="0"
+                      Explain="7 和 2 都是 int，整数除法直接舍去小数，结果是 int 类型的 3。想要 3.5 要写 7 / 2.0。" />
+            </Side>
+        </Demo>
+
+        @* ---------- 演示 2：格式化 ---------- *@
+        <Demo Title="演示 2：字符串插值与格式说明符">
+            <Stage>
+                <Field Label="输入一个数（试试 255.5、0.256、1234567）">
+                    <TextField @bind-Value="numberText" />
+                </Field>
+                <Flex Gap="SpaceScale.Sm" Wrap="true">
+                    <Button Variant="ButtonVariant.Soft" Tone="Tone.Neutral" @onclick="@(() => numberText = "255.5")">255.5</Button>
+                    <Button Variant="ButtonVariant.Soft" Tone="Tone.Neutral" @onclick="@(() => numberText = "0.256")">0.256</Button>
+                    <Button Variant="ButtonVariant.Soft" Tone="Tone.Neutral" @onclick="@(() => numberText = "1234567")">1234567</Button>
+                </Flex>
+                <ToggleGroup @bind-Value="formatKey" Required="true" aria-label="选一个格式">
+                    @foreach (var f in formats)
+                    {
+                        <ToggleItem Value="@f.Spec">@f.Spec</ToggleItem>
+                    }
+                </ToggleGroup>
+                @if (!numberValid)
+                {
+                    <Alert Tone="Tone.Warning">请输入一个数字</Alert>
+                }
+                <Grid MinItemWidth="CssLength.Rem(11)" Gap="SpaceScale.Sm">
+                    @foreach (var f in formats)
+                    {
+                        <Readout @key="@($"{f.Spec}{numberText}")" Title="@($"{{x:{f.Spec}}}　{f.Meaning}")" Value="@Format(f.Spec)" />
+                    }
+                </Grid>
+            </Stage>
+            <Side>
+                <CodeBlock Code="@FormatCode" Lang="csharp" Copyable="false" />
+                <Narration @key="formatKey" Emoji="🎛️">
+                    字符串前面加 <Code>$</Code>，花括号里直接写变量；冒号后面是"怎么显示"。<Code>F2</Code> 保留两位小数、<Code>X2</Code> 十六进制（调协议天天用）、
+                    <Code>P1</Code> 百分比（会先乘 100）、<Code>N0</Code> 千分位。
+                </Narration>
+                <Quiz Question="$“{255:X2}” 的结果是？" Options="@(new[] { "FF", "ff", "255", "0xFF" })" Answer="0"
+                      Explain="X 是大写十六进制，2 表示至少两位；想要小写用 x2。前缀 0x 不会自动加，要自己写在字符串里。" />
+            </Side>
+        </Demo>
+
+        @* ---------- 演示 3：空值 ---------- *@
+        <Demo Title="演示 3：空值处理（?. ?? ??= is null）">
+            <Stage>
+                <Paragraph Tone="TextTone.Muted">变量 <Code>string? name</Code> 现在是：</Paragraph>
+                <ToggleGroup @bind-Value="nameState" Required="true" aria-label="name 的值">
+                    <ToggleItem Value="null">null</ToggleItem>
+                    <ToggleItem Value="empty">"" （空字符串）</ToggleItem>
+                    <ToggleItem Value="value">"Rider"</ToggleItem>
+                </ToggleGroup>
+                <Grid MinItemWidth="CssLength.Rem(14)" Gap="SpaceScale.Sm">
+                    @foreach (var (expression, result) in NullResults)
+                    {
+                        <Readout @key="@($"{nameState}{expression}")" Title="@expression" Value="@result" />
+                    }
+                </Grid>
+            </Stage>
+            <Side>
+                <CodeBlock Code="@NullCode" Lang="csharp" Copyable="false" />
+                <Narration @key="nameState" Emoji="🛡️">
+                    <Code>?.</Code> 遇到 null 就整体返回 null，不会崩；<Code>??</Code> 给 null 一个默认值；<Code>??=</Code> 只在为 null 时才赋值。
+                    <strong>null 和空字符串是两回事</strong>：<Code>"".Length</Code> 是 0，而 <Code>null.Length</Code> 会抛 NullReferenceException——判断"没内容"用 <Code>string.IsNullOrEmpty</Code>。
+                </Narration>
+                <Quiz Question="name 为 null 时，name!.Length 会怎样？" Options="@(new[] { "返回 0", "返回 null", "抛出 NullReferenceException" })" Answer="2"
+                      Explain="! 只是告诉编译器“我保证这里不是 null”，不会真的检查；运行时是 null 照样崩。滥用 ! 等于关掉了编译器的空值保护。" />
+            </Side>
+        </Demo>
+
+        @* ---------- 演示 4：范围与元组 ---------- *@
+        <Demo Title="演示 4：范围索引与元组">
+            <Stage>
+                <Flex Gap="SpaceScale.Sm" Wrap="true">
+                    @for (var i = 0; i < array.Length; i++)
+                    {
+                        var index = i;
+                        <Slot @key="@($"{index}{RangeKind(index)}")" Name="@($"下标 {index}　倒数 ^{array.Length - index}")" Data="@array[index].ToString()" Changed="@(RangeKind(index) != "")" />
+                    }
+                </Flex>
+                <Field Label="@($"起点 start = {start}（包含）")">
+                    <Slider TValue="int" @bind-Value="start" Min="0" Max="5" />
+                </Field>
+                <Field Label="@($"终点 end = {end}（不包含）")">
+                    <Slider TValue="int" @bind-Value="end" Min="0" Max="5" />
+                </Field>
+                <Field Label="@($"倒数第几个：^{fromEnd}")">
+                    <Slider TValue="int" @bind-Value="fromEnd" Min="1" Max="5" />
+                </Field>
+            </Stage>
+            <Side>
+                <CodeBlock Code="@RangeCode" Lang="csharp" Copyable="false" />
+                <Narration Emoji="✂️">
+                    <Code>arr[start..end]</Code> 取下标 start 到 end <strong>之前</strong>的元素（左闭右开）；<Code>^1</Code> 是倒数第一个。
+                    <Code>(int Min, int Max)</Code> 这种<strong>命名元组</strong>让方法一次返回多个值，调用处直接解构 <Code>var (min, max) = ...</Code>。
+                </Narration>
+                <Quiz Question="int[] arr = [10, 20, 30, 40, 50]; arr[1..3] 是？" Options="@(new[] { "[20, 30]", "[20, 30, 40]", "[10, 20, 30]" })" Answer="0"
+                      Explain="范围左闭右开：包含下标 1，不包含下标 3，所以是下标 1 和 2，即 20 和 30。" />
+            </Side>
+        </Demo>
+    </ChildContent>
+</LessonPage>
+
+@code {
+    // ---- 演示 1：类型 ----
+    sealed record TypeInfo(string Key, string Literal, string ClrName, string Range, string Usage);
+
+    static readonly TypeInfo[] types =
+    [
+        new("int", "42", "System.Int32", "-21 亿 ~ 21 亿", "计数、下标、普通整数"),
+        new("long", "10_000_000_000L", "System.Int64", "±9.2 × 10¹⁸", "放不进 int 的大整数、时间戳"),
+        new("double", "3.14", "System.Double", "约 15 位有效数字", "测量值、科学计算"),
+        new("decimal", "19.99m", "System.Decimal", "28 位十进制精确", "金额、不能有误差的计算"),
+        new("bool", "true", "System.Boolean", "true / false", "开关、条件"),
+        new("char", "'A'", "System.Char", "一个 UTF-16 字符", "单个字符"),
+        new("string", "\"Rider\"", "System.String", "不可变的文本", "名称、消息、协议文本"),
+    ];
+
+    string typeKey = "int";
+    string divisor = "int";
+
+    TypeInfo CurrentType => types.First(t => t.Key == typeKey);
+
+    string DivisionResult => divisor switch
+    {
+        "double" => $"{7 / 2.0}（double）",
+        "decimal" => $"{7m / 2}（decimal）",
+        _ => $"{7 / 2}（int，小数被舍去）",
+    };
+
+    string TypeCode => string.Join("\n",
+        $"var x = {CurrentType.Literal};   // 推断为 {CurrentType.Key}（{CurrentType.ClrName}）",
+        $"Console.WriteLine(x.GetType().Name);   // {CurrentType.ClrName.Split('.')[1]}",
+        "",
+        divisor switch
+        {
+            "double" => "var r = 7 / 2.0;   // 有一边是 double，按小数除：3.5",
+            "decimal" => "var r = 7m / 2;   // decimal 除法，精确：3.5",
+            _ => "var r = 7 / 2;   // 两边都是 int：3（不是 JS 的 3.5）",
+        });
+
+    // ---- 演示 2：格式化 ----
+    sealed record FormatInfo(string Spec, string Meaning);
+
+    static readonly FormatInfo[] formats =
+    [
+        new("F2", "两位小数"), new("F0", "不要小数"), new("N0", "千分位"), new("P1", "百分比"),
+        new("E2", "科学计数"), new("X2", "十六进制"), new("D5", "补零到 5 位"),
+    ];
+
+    string numberText = "255.5";
+    string formatKey = "F2";
+
+    bool numberValid => double.TryParse(numberText, NumberStyles.Float, CultureInfo.InvariantCulture, out _);
+
+    double NumberValue => double.TryParse(numberText, NumberStyles.Float, CultureInfo.InvariantCulture, out var v) ? v : 0;
+
+    // X、D 只对整数有意义，其余对小数
+    string Format(string spec) => spec switch
+    {
+        "X2" or "D5" => ((long)NumberValue).ToString(spec, CultureInfo.InvariantCulture),
+        _ => NumberValue.ToString(spec, CultureInfo.InvariantCulture),
+    };
+
+    string FormatCode
+    {
+        get
+        {
+            var type = formatKey is "X2" or "D5" ? "long" : "double";
+            return string.Join("\n",
+                $"{type} x = {(type == "long" ? ((long)NumberValue).ToString() : NumberValue.ToString(CultureInfo.InvariantCulture))};",
+                $"var text = $\"{{x:{formatKey}}}\";   // \"{Format(formatKey)}\"");
+        }
+    }
+
+    // ---- 演示 3：空值 ----
+    string nameState = "null";
+
+    string? CurrentName => nameState switch { "null" => null, "empty" => "", _ => "Rider" };
+
+    (string Expression, string Result)[] NullResults
+    {
+        get
+        {
+            var name = CurrentName;
+            string npe;
+            try { npe = name!.Length.ToString(); }
+            catch (NullReferenceException) { npe = "💥 抛出 NullReferenceException"; }
+            return
+            [
+                ("name?.Length", name?.Length is { } length ? length.ToString() : "null"),
+                ("name ?? \"(空)\"", name ?? "(空)"),
+                ("name is null", (name is null).ToString()),
+                ("string.IsNullOrEmpty(name)", string.IsNullOrEmpty(name).ToString()),
+                ("name!.Length", npe),
+            ];
+        }
+    }
+
+    string NullCode => string.Join("\n",
+        $"string? name = {(CurrentName is null ? "null" : $"\"{CurrentName}\"")};",
+        "int? length = name?.Length;            // null 时得到 null，不会崩",
+        "var display = name ?? \"(空)\";          // null 时用默认值",
+        "name ??= \"默认值\";                     // 只在 null 时才赋值",
+        "if (name is not null) { /* 有值 */ }");
+
+    // ---- 演示 4：范围与元组 ----
+    static readonly int[] array = [10, 20, 30, 40, 50];
+    int start = 1;
+    int end = 3;
+    int fromEnd = 1;
+
+    // 下标 i 是在范围里、还是倒数选中的：返回标记，空串表示没选中
+    string RangeKind(int i) => (i >= start && i < end ? "r" : "") + (i == array.Length - fromEnd ? "e" : "");
+
+    string RangeCode
+    {
+        get
+        {
+            var slice = start <= end && end <= array.Length ? string.Join(", ", array[start..end]) : "（起点必须不大于终点）";
+            var minMax = start < end ? $"min = {array[start..end].Min()}, max = {array[start..end].Max()}" : "（空范围没有最小/最大值）";
+            return string.Join("\n",
+                "int[] arr = [10, 20, 30, 40, 50];",
+                $"var slice = arr[{start}..{end}];   // [{slice}]",
+                $"var last = arr[^{fromEnd}];   // {array[^fromEnd]}",
+                "",
+                "static (int Min, int Max) MinMax(int[] v) => (v.Min(), v.Max());",
+                $"var (min, max) = MinMax(slice);   // {minMax}");
+        }
+    }
+}

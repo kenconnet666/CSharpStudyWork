@@ -1,0 +1,241 @@
+@page "/new"
+@inherits RuneComponent
+
+@*
+    语法精讲 9：C# 12 ~ 14 新特性（.NET 10 对应 C# 14）。对应 01.CSharpSyntax 第 11 课。
+    每个特性一个小演示：field 关键字、扩展成员、空条件赋值、集合表达式。
+*@
+
+<LessonPage Title="C# 12 ~ 14 新特性">
+    <Intro>
+        这几年 C# 每年一个版本，都在让代码更短、更清楚。下面是最值得马上用起来的几个：<Code>field</Code> 关键字（C# 14）、
+        扩展成员（C# 14）、空条件赋值 <Code>?.=</Code>（C# 14）、集合表达式（C# 12）。
+    </Intro>
+    <ChildContent>
+        @* ---------- field ---------- *@
+        <Demo Title="演示 1：field 关键字——属性里的“隐藏字段”（C# 14）">
+            <Stage>
+                <Field Label="Name（会自动去掉首尾空格）">
+                    <TextField @bind-Value="nameInput" />
+                </Field>
+                <Field Label="@($"Age = {ageInput}（负数会被修成 0）")">
+                    <Slider TValue="int" @bind-Value="ageInput" Min="-20" Max="100" />
+                </Field>
+                <Grid MinItemWidth="CssLength.Rem(13)" Gap="SpaceScale.Sm">
+                    <Readout @key="@profile.Name" Title="profile.Name 实际存的" Value="@($"[{profile.Name}]")" />
+                    <Readout @key="@profile.Age.ToString()" Title="profile.Age 实际存的" Value="@profile.Age.ToString()" />
+                </Grid>
+            </Stage>
+            <Side>
+                <CodeBlock Code="@FieldCode" Lang="csharp" Copyable="false" />
+                <Narration Emoji="🫥">
+                    以前给属性加校验，必须自己声明一个私有字段（<Code>_name</Code>）再手写 get/set。现在 <Code>field</Code> 直接代表编译器生成的那个隐藏字段，
+                    <Code>set => field = value.Trim();</Code> 一行搞定，不用再起名字。
+                </Narration>
+                <Quiz Question="field 关键字代表什么？" Options="@(new[] { "一个叫 field 的普通变量", "编译器为这个属性生成的隐藏支持字段" })" Answer="1"
+                      Explain="在属性的 get/set 里，field 指向这个属性自己的隐藏支持字段，不需要手写 private 字段。" />
+            </Side>
+        </Demo>
+
+        @* ---------- 扩展成员 ---------- *@
+        <Demo Title="演示 2：扩展成员——连属性和静态成员都能扩展（C# 14）">
+            <Stage>
+                <Field Label="输入一段文字">
+                    <TextField @bind-Value="extText" />
+                </Field>
+                <Field Label="@($"截断长度 {extMax}")">
+                    <Slider TValue="int" @bind-Value="extMax" Min="1" Max="12" />
+                </Field>
+                <Grid MinItemWidth="CssLength.Rem(14)" Gap="SpaceScale.Sm">
+                    <Readout Title="text.IsBlank（扩展属性）" Value="@extText.IsBlank.ToString()" />
+                    <Readout Title="@($"text.Truncate({extMax})")" Value="@extText.Truncate(extMax)" />
+                    <Readout Title="@($"string.Repeat(\"=\", {extMax})")" Value="@string.Repeat("=", extMax)" />
+                </Grid>
+            </Stage>
+            <Side>
+                <CodeBlock Code="@ExtensionCode" Lang="csharp" Copyable="false" />
+                <Narration Emoji="🧰">
+                    给别人写的类型（比如 <Code>string</Code>）"加功能"，以前只能写扩展<strong>方法</strong>。<Code>extension(string source) &#123; ... &#125;</Code> 这种扩展块里，
+                    可以写<strong>属性</strong>（<Code>IsBlank</Code>），用 <Code>extension(string)</Code> 还能加<strong>静态成员</strong>（<Code>string.Repeat</Code>）。
+                </Narration>
+            </Side>
+        </Demo>
+
+        @* ---------- ?.= ---------- *@
+        <Demo Title="演示 3：空条件赋值 ?.=（C# 14）">
+            <Stage>
+                <ToggleGroup @bind-Value="customerState" Required="true" aria-label="customer 的状态">
+                    <ToggleItem Value="null">customer = null</ToggleItem>
+                    <ToggleItem Value="object">customer = new Customer()</ToggleItem>
+                </ToggleGroup>
+                <Flex Gap="SpaceScale.Sm" Wrap="true">
+                    <Button Icon="Lucide.Pencil" @onclick="AssignName">customer?.Name = "李四"</Button>
+                    <Button Variant="ButtonVariant.Ghost" Tone="Tone.Neutral" @onclick="@(() => { customerName = null; assignNote = "清除了名字。"; })">清除名字</Button>
+                </Flex>
+                <Flex Gap="SpaceScale.Lg" Wrap="true">
+                    <Slot Name="customer" Data="@(customerState == "null" ? "null" : "Customer 对象")" />
+                    <Slot @key="@customerName" Name="customer?.Name" Data="@(customerName ?? "（没有值）")" Changed="@(customerName is not null)" />
+                </Flex>
+            </Stage>
+            <Side>
+                <CodeBlock Code="@NullAssignCode" Lang="csharp" Copyable="false" />
+                <Narration @key="@assignNote" Emoji="🛡️">@assignNote</Narration>
+            </Side>
+        </Demo>
+
+        @* ---------- 集合表达式 ---------- *@
+        <Demo Title="演示 4：集合表达式与展开 ..（C# 12）">
+            <Stage>
+                <Paragraph Tone="TextTone.Muted">选要展开进结果的集合：</Paragraph>
+                <ToggleGroup SelectionMode="SelectionMode.Multiple" @bind-Values="spreads" aria-label="展开哪些集合">
+                    <ToggleItem Value="a">..a　[1, 2, 3]</ToggleItem>
+                    <ToggleItem Value="b">..b　[10, 20]</ToggleItem>
+                    <ToggleItem Value="c">..c　[7]</ToggleItem>
+                </ToggleGroup>
+                <Flex Gap="SpaceScale.Sm" Wrap="true">
+                    @foreach (var value in CollectionResult)
+                    {
+                        <Slot @key="@($"{string.Join(',', spreads)}{value}")" Name="元素" Data="@value.ToString()" Changed="true" />
+                    }
+                </Flex>
+            </Stage>
+            <Side>
+                <CodeBlock Code="@CollectionCode" Lang="csharp" Copyable="false" />
+                <Narration Emoji="📚">
+                    <Code>[ ... ]</Code> 统一创建数组、<Code>List</Code>、<Code>Span</Code> 等，具体是什么由左边的类型决定；<Code>..x</Code> 把另一个集合的元素<strong>展开</strong>进来（和 JS 的 <Code>...x</Code> 一样）。
+                </Narration>
+                <Quiz Question="List&lt;int&gt; r = [0, ..a, 99]; 其中 a = [1, 2]，结果是？" Options="@(new[] { "[0, [1, 2], 99]", "[0, 1, 2, 99]" })" Answer="1"
+                      Explain=".. 是展开：把 a 里的元素一个个放进来，而不是把 a 当成一个元素。" />
+            </Side>
+        </Demo>
+    </ChildContent>
+</LessonPage>
+
+@code {
+    // ---- 演示 1：field ----
+    sealed class Profile
+    {
+        public string Name
+        {
+            get;
+            set => field = value.Trim();
+        } = "";
+
+        public int Age
+        {
+            get;
+            set => field = value < 0 ? 0 : value;
+        }
+    }
+
+    string nameInput = "  张三  ";
+    int ageInput = -5;
+
+    Profile profile => new() { Name = nameInput, Age = ageInput };
+
+    string FieldCode => string.Join("\n",
+        "class Profile",
+        "{",
+        "    public string Name",
+        "    {",
+        "        get;",
+        "        set => field = value.Trim();   // field = 编译器生成的隐藏字段",
+        "    } = \"\";",
+        "",
+        "    public int Age",
+        "    {",
+        "        get;",
+        "        set => field = value < 0 ? 0 : value;",
+        "    }",
+        "}",
+        "",
+        $"var profile = new Profile {{ Name = \"{nameInput}\", Age = {ageInput} }};",
+        $"// profile.Name = \"{profile.Name}\"，profile.Age = {profile.Age}");
+
+    // ---- 演示 2：扩展成员 ----
+    string extText = "   ";
+    int extMax = 5;
+
+    const string ExtensionCode = """
+        public static class StringExtensions
+        {
+            extension(string source)
+            {
+                public bool IsBlank => string.IsNullOrWhiteSpace(source);      // 扩展属性
+                public string Truncate(int max) => source.Length <= max ? source : source[..max] + "…";
+            }
+
+            extension(string)
+            {
+                public static string Repeat(string text, int times) => string.Concat(Enumerable.Repeat(text, times));
+            }
+        }
+
+        // 用起来就像 string 自带的：
+        text.IsBlank
+        text.Truncate(5)
+        string.Repeat("=", 5)
+        """;
+
+    // ---- 演示 3：?.= ----
+    sealed class Customer
+    {
+        public string? Name { get; set; }
+    }
+
+    string customerState = "null";
+    string? customerName;
+    string assignNote = "点“customer?.Name = ”试试：customer 是 null 时会发生什么？";
+
+    void AssignName()
+    {
+        Customer? customer = customerState == "null" ? null : new Customer();
+        customer?.Name = "李四";
+        if (customer is not null)
+        {
+            customerName = customer.Name;
+            assignNote = "customer 不是 null，赋值<strong>执行了</strong>：Name 变成了“李四”。".Replace("<strong>", "").Replace("</strong>", "");
+        }
+        else
+        {
+            assignNote = "customer 是 null，整条赋值语句被<strong>安静地跳过</strong>，不会抛 NullReferenceException。以前要写 if (customer != null) 才行。".Replace("<strong>", "").Replace("</strong>", "");
+        }
+    }
+
+    string NullAssignCode => string.Join("\n",
+        $"Customer? customer = {(customerState == "null" ? "null" : "new Customer()")};",
+        "",
+        "// 以前：",
+        "if (customer is not null) customer.Name = \"李四\";",
+        "",
+        "// 现在（C# 14）：",
+        "customer?.Name = \"李四\";   // customer 为 null 就整条跳过");
+
+    // ---- 演示 4：集合表达式 ----
+    IReadOnlyList<string> spreads = ["a", "b"];
+
+    static readonly int[] a = [1, 2, 3];
+    static readonly int[] b = [10, 20];
+    static readonly int[] c = [7];
+
+    List<int> CollectionResult
+    {
+        get
+        {
+            List<int> result = [0];
+            if (spreads.Contains("a")) result.AddRange(a);
+            if (spreads.Contains("b")) result.AddRange(b);
+            if (spreads.Contains("c")) result.AddRange(c);
+            result.Add(99);
+            return result;
+        }
+    }
+
+    string CollectionCode => string.Join("\n",
+        "int[] a = [1, 2, 3];",
+        "int[] b = [10, 20];",
+        "int[] c = [7];",
+        "",
+        $"List<int> result = [0, {string.Concat(new[] { "a", "b", "c" }.Where(spreads.Contains).Select(n => $"..{n}, "))}99];",
+        $"// result = [{string.Join(", ", CollectionResult)}]");
+}

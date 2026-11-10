@@ -1,0 +1,258 @@
+@page "/oop"
+@inherits RuneComponent
+
+@*
+    语法精讲 3：继承、接口、多态。对应 01.CSharpSyntax 第 4 课。
+    页面里的类都是真实定义的，点按钮就是真的在调用它们的方法。
+*@
+
+<LessonPage Title="面向对象：继承、多态、接口">
+    <Intro>
+        <strong>多态</strong>：同一个变量类型，装不同的对象，调用同一个方法，各做各的。和 Java 最大的不同是——C# 的方法<strong>默认不能被重写</strong>，
+        父类要写 <Code>virtual</Code>、子类要写 <Code>override</Code>。
+    </Intro>
+    <ChildContent>
+        @* ---------- 演示 1：多态 ---------- *@
+        <Demo Title="演示 1：同一个变量类型，三种设备">
+            <Stage>
+                <Paragraph Tone="TextTone.Muted">下面三个变量的声明类型都是 <Code>DeviceBase</Code>，但里面装的对象不一样。对它们调用同一个方法：</Paragraph>
+                <Flex Gap="SpaceScale.Sm" Wrap="true">
+                    <Button Icon="Lucide.Zap" @onclick="@(() => CallAll("Connect"))">foreach: d.Connect()</Button>
+                    <Button Icon="Lucide.Zap" @onclick="@(() => CallAll("Status"))">foreach: d.Status()</Button>
+                    <Button Variant="ButtonVariant.Ghost" Tone="Tone.Neutral" @onclick="@(() => { outputs.Clear(); lastCall = ""; })">清除</Button>
+                </Flex>
+                <Grid MinItemWidth="CssLength.Rem(15)" Gap="SpaceScale.Md">
+                    @foreach (var d in devices)
+                    {
+                        <div>
+                            <Small Tone="TextTone.Muted">DeviceBase d = new @(d.GetType().Name)(...)</Small>
+                            <Slot @key="@($"{d.Name}{outputs.GetValueOrDefault(d.Name)}")" Name="@($"{d.Name}（真实类型 {d.GetType().Name}）")" Data="@(outputs.GetValueOrDefault(d.Name) ?? "（还没调用）")" Changed="@outputs.ContainsKey(d.Name)" />
+                        </div>
+                    }
+                </Grid>
+            </Stage>
+            <Side>
+                <CodeBlock Code="@DeviceCode" Lang="csharp" Copyable="false" />
+                <Narration @key="lastCall" Emoji="🎭">
+                    @if (lastCall == "")
+                    {
+                        <span>点上面的按钮：同一行 <Code>d.Connect()</Code>，运行时会<strong>根据对象的真实类型</strong>找到各自的实现。</span>
+                    }
+                    else if (lastCall == "Status")
+                    {
+                        <span>注意<strong>扫码枪</strong>：它没有重写 <Code>Status()</Code>，所以用的是父类的 "未知状态"；<strong>模拟器</strong>重写了，并用 <Code>base.Status()</Code> 在父类结果前加了前缀。</span>
+                    }
+                    else
+                    {
+                        <span>三个设备各自执行了自己重写的 <Code>Connect()</Code>。调用方一行代码都不用改，就能支持新设备——这就是多态的价值。</span>
+                    }
+                </Narration>
+                <Quiz Question="DeviceBase 里 Connect() 写成 abstract，意味着？" Options="@(new[] { "子类可以选择性重写", "子类必须实现它，DeviceBase 自己没有实现", "它不能被调用" })" Answer="1"
+                      Explain="abstract 方法没有方法体，抽象类本身不能 new，所有具体的子类都必须实现它。想让子类“可以”重写，用 virtual。" />
+            </Side>
+        </Demo>
+
+        @* ---------- 演示 2：override vs new ---------- *@
+        <Demo Title="演示 2：override 与 new 的区别">
+            <Stage>
+                <Paragraph Tone="TextTone.Muted">
+                    <Code>Base b = new Derived();</Code>　和　<Code>Derived d = new Derived();</Code>　是<strong>同一种对象</strong>，只是变量的声明类型不同。分别调用两个方法：
+                </Paragraph>
+                <Grid MinItemWidth="CssLength.Rem(14)" Gap="SpaceScale.Md">
+                    <Slot Name="b.Virtual()　virtual+override" Data="@baseVariable.Virtual()" Changed="@(declared == "base")" />
+                    <Slot Name="d.Virtual()　virtual+override" Data="@derivedVariable.Virtual()" Changed="@(declared == "derived")" />
+                    <Slot Name="b.Hidden()　new 隐藏" Data="@baseVariable.Hidden()" Changed="@(declared == "base")" />
+                    <Slot Name="d.Hidden()　new 隐藏" Data="@derivedVariable.Hidden()" Changed="@(declared == "derived")" />
+                </Grid>
+                <ToggleGroup @bind-Value="declared" Required="true" aria-label="高亮哪个变量">
+                    <ToggleItem Value="base">高亮 Base b（声明类型是 Base）</ToggleItem>
+                    <ToggleItem Value="derived">高亮 Derived d</ToggleItem>
+                </ToggleGroup>
+            </Stage>
+            <Side>
+                <CodeBlock Code="@OverrideCode" Lang="csharp" Copyable="false" />
+                <Narration Emoji="🔬">
+                    <strong>virtual + override</strong>：看<strong>对象的真实类型</strong>（Derived），不管变量声明成什么，结果都是 Derived 的版本——这是真正的多态。
+                    <strong>new</strong>：只是子类又定义了一个<strong>同名的新方法</strong>把父类的遮住，调用哪个看<strong>变量的声明类型</strong>——Base 变量调到父类的，Derived 变量调到子类的。
+                    实际写代码几乎不用 new 隐藏方法，容易造成困惑；知道区别、会读别人的代码即可。
+                </Narration>
+                <Quiz Question="Base b = new Derived(); b.Hidden() 调用的是哪个版本？（Hidden 在 Derived 里用 new 隐藏）" Options="@(new[] { "Base.Hidden", "Derived.Hidden" })" Answer="0"
+                      Explain="new 隐藏不是多态：调用哪个版本看变量的声明类型，b 声明成 Base，所以调用 Base.Hidden。" />
+            </Side>
+        </Demo>
+
+        @* ---------- 演示 3：组合 ---------- *@
+        <Demo Title="演示 3：依赖接口，换协议不用改调用方（组合优于继承）">
+            <Stage>
+                <ToggleGroup @bind-Value="clientKey" Required="true" aria-label="选一个 PLC 客户端">
+                    <ToggleItem Value="s7">FakeS7Client</ToggleItem>
+                    <ToggleItem Value="modbus">FakeModbusClient</ToggleItem>
+                    <ToggleItem Value="sim">SimulatorClient</ToggleItem>
+                </ToggleGroup>
+                <Field Label="@($"轮询 {addressCount} 个地址")">
+                    <Slider TValue="int" @bind-Value="addressCount" Min="1" Max="5" />
+                </Field>
+                <Flex Direction="LayoutDirection.Column" Gap="SpaceScale.Sm">
+                    @foreach (var line in PollLines)
+                    {
+                        <Slot @key="@($"{clientKey}{line}")" Name="PollingService.Poll 的输出" Data="@line" Changed="true" />
+                    }
+                </Flex>
+            </Stage>
+            <Side>
+                <CodeBlock Code="@PollingCode" Lang="csharp" Copyable="false" />
+                <Narration @key="clientKey" Emoji="🔌">
+                    <Code>PollingService</Code> 只认识 <Code>IPlcClient</Code> 这个<strong>接口</strong>，不知道背后是 S7、Modbus 还是模拟器。
+                    以后接入新协议，只要再写一个实现接口的类，<Code>PollingService</Code> 和界面代码一行都不用改。
+                    经验：优先"组合 + 接口"，继承层级别超过两三层。
+                </Narration>
+                <Quiz Question="想让上位机既能连西门子又能连欧姆龙 PLC，界面代码应该依赖？" Options="@(new[] { "具体的 S7Client 类", "IPlcClient 接口", "一个 object 变量" })" Answer="1"
+                      Explain="依赖接口，界面不关心是谁实现的；每增加一种 PLC，只是多一个实现类，不用改界面。" />
+            </Side>
+        </Demo>
+    </ChildContent>
+</LessonPage>
+
+@code {
+    // ---- 演示 1：多态 ----
+    abstract class DeviceBase(string name)
+    {
+        public string Name { get; } = name;
+
+        public abstract string Connect();
+
+        public virtual string Status() => "未知状态";
+    }
+
+    sealed class PlcDevice(string name) : DeviceBase(name)
+    {
+        public override string Connect() => "通过 S7 协议连接";
+
+        public override string Status() => "PLC 运行中";
+    }
+
+    sealed class ScannerDevice(string name) : DeviceBase(name)
+    {
+        public override string Connect() => "通过串口连接";
+    }
+
+    sealed class SimulatorDevice(string name) : DeviceBase(name)
+    {
+        public override string Connect() => "模拟器直接就绪";
+
+        public override string Status() => "模拟-" + base.Status();
+    }
+
+    static readonly DeviceBase[] devices = [new PlcDevice("西门子 1200"), new ScannerDevice("扫码枪"), new SimulatorDevice("模拟器")];
+
+    readonly Dictionary<string, string> outputs = [];
+    string lastCall = "";
+
+    void CallAll(string method)
+    {
+        lastCall = method;
+        outputs.Clear();
+        foreach (var d in devices) outputs[d.Name] = method == "Connect" ? d.Connect() : d.Status();
+    }
+
+    string DeviceCode => string.Join("\n",
+        "abstract class DeviceBase(string name)",
+        "{",
+        "    public abstract string Connect();                 // 子类必须实现",
+        "    public virtual string Status() => \"未知状态\";      // 子类可以选择重写",
+        "}",
+        "class PlcDevice : DeviceBase       { public override string Connect() => ...; public override string Status() => ...; }",
+        "class ScannerDevice : DeviceBase   { public override string Connect() => ...; }   // 没重写 Status",
+        "class SimulatorDevice : DeviceBase { ...; public override string Status() => \"模拟-\" + base.Status(); }",
+        "",
+        lastCall == "" ? "foreach (DeviceBase d in devices) Console.WriteLine(d.Connect());" : $"foreach (DeviceBase d in devices) Console.WriteLine(d.{lastCall}());");
+
+    // ---- 演示 2：override vs new ----
+    class Base
+    {
+        public virtual string Virtual() => "Base.Virtual";
+
+        public string Hidden() => "Base.Hidden";
+    }
+
+    class Derived : Base
+    {
+        public override string Virtual() => "Derived.Virtual";
+
+        public new string Hidden() => "Derived.Hidden";
+    }
+
+    string declared = "base";
+    readonly Base baseVariable = new Derived();
+    readonly Derived derivedVariable = new();
+
+    const string OverrideCode = """
+        class Base
+        {
+            public virtual string Virtual() => "Base.Virtual";
+            public string Hidden() => "Base.Hidden";
+        }
+
+        class Derived : Base
+        {
+            public override string Virtual() => "Derived.Virtual";   // 重写：多态
+            public new string Hidden() => "Derived.Hidden";          // new：只是遮住父类的
+        }
+
+        Base b = new Derived();      // 声明类型 Base，真实对象 Derived
+        Derived d = new Derived();   // 声明类型 Derived，真实对象 Derived
+        """;
+
+    // ---- 演示 3：接口 ----
+    interface IPlcClient
+    {
+        string Name { get; }
+
+        int ReadInt(int address);
+    }
+
+    sealed class FakeS7Client : IPlcClient
+    {
+        public string Name => "S7";
+
+        public int ReadInt(int address) => address * 10;
+    }
+
+    sealed class FakeModbusClient : IPlcClient
+    {
+        public string Name => "Modbus";
+
+        public int ReadInt(int address) => 1000 + address;
+    }
+
+    sealed class SimulatorClient : IPlcClient
+    {
+        public string Name => "模拟器";
+
+        public int ReadInt(int address) => 42;
+    }
+
+    sealed class PollingService(IPlcClient client)
+    {
+        public IEnumerable<string> Poll(params int[] addresses) => addresses.Select(a => $"{client.Name}[{a}] = {client.ReadInt(a)}");
+    }
+
+    string clientKey = "s7";
+    int addressCount = 3;
+
+    IPlcClient CurrentClient => clientKey switch { "modbus" => new FakeModbusClient(), "sim" => new SimulatorClient(), _ => new FakeS7Client() };
+
+    IEnumerable<string> PollLines => new PollingService(CurrentClient).Poll([.. Enumerable.Range(1, addressCount)]);
+
+    string PollingCode => string.Join("\n",
+        "interface IPlcClient { string Name { get; } int ReadInt(int address); }",
+        "",
+        "class PollingService(IPlcClient client)    // 依赖接口，不依赖具体类",
+        "{",
+        "    public IEnumerable<string> Poll(params int[] addresses) =>",
+        "        addresses.Select(a => $\"{client.Name}[{a}] = {client.ReadInt(a)}\");",
+        "}",
+        "",
+        $"var service = new PollingService(new {CurrentClient.GetType().Name}());   // 换这一行，其余不动",
+        $"foreach (var line in service.Poll({string.Join(", ", Enumerable.Range(1, addressCount))})) Console.WriteLine(line);");
+}

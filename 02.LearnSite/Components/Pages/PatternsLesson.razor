@@ -1,0 +1,276 @@
+@page "/patterns"
+@using System.Globalization
+@inherits RuneComponent
+
+@*
+    语法精讲 6：模式匹配与 switch 表达式。对应 01.CSharpSyntax 第 8 课。
+    每个演示里，匹配到的那一条 case 会在代码里高亮——一眼看到"为什么是这个结果"。
+*@
+
+<LessonPage Title="模式匹配与 switch 表达式">
+    <Intro>
+        switch 表达式有返回值，每个分支是 <Code>模式 => 结果</Code>，不需要 <Code>break</Code>。
+        "模式"可以匹配<strong>值、范围、类型、属性、列表、元组</strong>——解析协议帧、写状态机特别方便。从上往下找，<strong>第一个匹配的分支</strong>生效。
+    </Intro>
+    <ChildContent>
+        @* ---------- 演示 1：列表模式解析帧 ---------- *@
+        <Demo Title="演示 1：用列表模式解析 Modbus 帧">
+            <Stage>
+                <Field Label="输入一帧数据（十六进制，空格分隔）" Error="@(frameValid ? null : "请输入十六进制字节，如 01 03 00 00 00 0A")">
+                    <TextField @bind-Value="frameText" />
+                </Field>
+                <Flex Gap="SpaceScale.Sm" Wrap="true">
+                    <Button Variant="ButtonVariant.Soft" Tone="Tone.Neutral" @onclick="@(() => frameText = "01 03 00 00 00 0A C5 CD")">读寄存器请求</Button>
+                    <Button Variant="ButtonVariant.Soft" Tone="Tone.Neutral" @onclick="@(() => frameText = "01 83 02")">异常响应</Button>
+                    <Button Variant="ButtonVariant.Soft" Tone="Tone.Neutral" @onclick="@(() => frameText = "11 06 00 01 00 03")">写寄存器请求</Button>
+                    <Button Variant="ButtonVariant.Soft" Tone="Tone.Neutral" @onclick="@(() => frameText = "")">空帧</Button>
+                    <Button Variant="ButtonVariant.Soft" Tone="Tone.Neutral" @onclick="@(() => frameText = "01")">只有一个字节</Button>
+                </Flex>
+                @if (frameValid)
+                {
+                    <ByteCells Bytes="FrameBytes" Ranks="FrameRanks" Tags="FrameTags" />
+                }
+                <Slot @key="@FrameResult.Text" Name="@($"匹配到第 {FrameResult.Arm} 条分支")" Data="@FrameResult.Text" Changed="true" />
+            </Stage>
+            <Side>
+                <CodeBlock Code="@FrameCode" Lang="csharp" HighlightLines="@FrameResult.Lines" LineNumbers="true" Copyable="false" />
+                <Narration @key="@FrameResult.Lines" Emoji="🔎">
+                    <Code>[var unit, 0x03, var ah, ..]</Code> 的意思：第 1 个元素取名 unit，第 2 个必须等于 0x03，接着取 4 个，<Code>..</Code> 吞掉后面任意多个（这里是 CRC）。
+                    异常帧的功能码是 <Code>0x83</Code> 这样的数，没法用字面量，所以用 <Code>when</Code> 附加条件。<strong>顺序重要</strong>：先写更具体的分支。
+                </Narration>
+                <Quiz Question="[var unit, 0x06, var ah, var al, var vh, var vl] 能匹配 7 个字节的帧吗？" Options="@(new[] { "能", "不能" })" Answer="1"
+                      Explain="没有写 .. 的列表模式要求长度正好等于模式里的元素个数（6 个）。想允许后面还有内容，要在末尾加 ..。" />
+            </Side>
+        </Demo>
+
+        @* ---------- 演示 2：关系模式 ---------- *@
+        <Demo Title="演示 2：关系模式与逻辑模式（&gt;=、and、or、not）">
+            <Stage>
+                <Field Label="@($"分数 score = {score}")">
+                    <Slider TValue="int" @bind-Value="score" Min="0" Max="100" />
+                </Field>
+                <Flex Gap="SpaceScale.Md" Wrap="true">
+                    <Slot Name="区间" Data="@GradeResult.Range" />
+                    <Slot @key="@GradeResult.Text" Name="grade" Data="@GradeResult.Text" Changed="true" />
+                </Flex>
+                <ProportionBar Segments="GradeBar" Label="分数区间" />
+            </Stage>
+            <Side>
+                <CodeBlock Code="@GradeCode" Lang="csharp" HighlightLines="@GradeResult.Lines" LineNumbers="true" Copyable="false" />
+                <Narration Emoji="📏">
+                    <Code>&gt;= 90</Code> 是<strong>关系模式</strong>，<Code>and / or / not</Code> 把模式组合起来：<Code>&gt;= 60 and &lt; 90</Code> 读作"大于等于 60 并且小于 90"。
+                    最后的 <Code>_</Code> 是"其他所有情况"，相当于 default。
+                </Narration>
+                <Quiz Question="score 正好是 90，哪个分支匹配？" Options="@(new[] { ">= 90 => 优", ">= 60 and < 90 => 及格" })" Answer="0"
+                      Explain="从上往下找，第一个满足的生效：90 满足 >= 90，所以是“优”；第二个分支要求小于 90，90 不满足。" />
+            </Side>
+        </Demo>
+
+        @* ---------- 演示 3：类型与属性模式 ---------- *@
+        <Demo Title="演示 3：类型模式与属性模式">
+            <Stage>
+                <Paragraph Tone="TextTone.Muted">选一个 <Code>object?</Code> 看看它走哪条分支：</Paragraph>
+                <ToggleGroup @bind-Value="objectKey" Required="true" aria-label="选一个对象">
+                    @foreach (var o in objects)
+                    {
+                        <ToggleItem Value="@o.Key">@o.Label</ToggleItem>
+                    }
+                </ToggleGroup>
+                <Slot @key="@ObjectResult.Text" Name="@($"匹配到第 {ObjectResult.Arm} 条分支")" Data="@ObjectResult.Text" Changed="true" />
+            </Stage>
+            <Side>
+                <CodeBlock Code="@ObjectCode" Lang="csharp" HighlightLines="@ObjectResult.Lines" LineNumbers="true" Copyable="false" />
+                <Narration Emoji="🧩">
+                    <Code>int n when n &gt; 40</Code>：类型模式 + 取名 + 附加条件。<Code>string &#123; Length: &gt; 3 &#125; s</Code>：属性模式，检查对象的属性值。
+                    <Code>Point(var x, var y)</Code>：位置模式，利用 record 的解构。比一串 <Code>if (obj is int) ... else if ...</Code> 清楚得多。
+                </Narration>
+            </Side>
+        </Demo>
+
+        @* ---------- 演示 4：状态机 ---------- *@
+        <Demo Title="演示 4：元组模式写状态机">
+            <Stage>
+                <Flex Gap="SpaceScale.Lg" Align="ItemAlign.Center" Wrap="true">
+                    @foreach (var s in new[] { MachineState.Idle, MachineState.Running, MachineState.Paused })
+                    {
+                        <Slot Name="@("状态")" Data="@s.ToString()" Changed="@(machine == s)" />
+                    }
+                </Flex>
+                <Flex Gap="SpaceScale.Sm" Wrap="true">
+                    <Button Icon="Lucide.Play" @onclick="@(() => Send(MachineCommand.Start))">Start</Button>
+                    <Button Variant="ButtonVariant.Soft" @onclick="@(() => Send(MachineCommand.Pause))">Pause</Button>
+                    <Button Variant="ButtonVariant.Soft" Tone="Tone.Danger" @onclick="@(() => Send(MachineCommand.Stop))">Stop</Button>
+                    <Button Variant="ButtonVariant.Ghost" Tone="Tone.Neutral" @onclick="@(() => { machine = MachineState.Idle; machineLines = ""; machineNote = "回到 Idle。"; })">重来</Button>
+                </Flex>
+            </Stage>
+            <Side>
+                <CodeBlock Code="@MachineCode" Lang="csharp" HighlightLines="@machineLines" LineNumbers="true" Copyable="false" />
+                <Narration @key="@machineNote" Emoji="🚦">@machineNote</Narration>
+                <Quiz Question="设备在 Idle 状态收到 Pause 命令，会怎样？" Options="@(new[] { "抛出异常", "状态保持 Idle", "变成 Paused" })" Answer="1"
+                      Explain="没有哪条分支匹配 (Idle, Pause)，最后的 _ => state 把当前状态原样返回。把“不合法的转移”统一交给 _ 处理，状态机就不会乱。" />
+            </Side>
+        </Demo>
+    </ChildContent>
+</LessonPage>
+
+@code {
+    // ---- 演示 1：帧 ----
+    string frameText = "01 03 00 00 00 0A C5 CD";
+
+    byte[] FrameBytes => TryParseFrame(frameText, out var bytes) ? bytes : [];
+
+    bool frameValid => TryParseFrame(frameText, out _);
+
+    static bool TryParseFrame(string text, out byte[] bytes)
+    {
+        var parts = text.Split([' ', ','], StringSplitOptions.RemoveEmptyEntries);
+        var list = new List<byte>();
+        foreach (var part in parts)
+        {
+            if (!byte.TryParse(part, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var b))
+            {
+                bytes = [];
+                return false;
+            }
+
+            list.Add(b);
+        }
+
+        bytes = [.. list];
+        return true;
+    }
+
+    int[] FrameRanks => [.. FrameBytes.Select((_, i) => i == 0 ? 0 : i == 1 ? 1 : 3)];
+
+    string[] FrameTags => [.. FrameBytes.Select((_, i) => i == 0 ? "从站" : i == 1 ? "功能码" : "")];
+
+    (int Arm, string Lines, string Text) FrameResult
+    {
+        get
+        {
+            if (!frameValid) return (0, "", "（请先输入合法的十六进制）");
+            return FrameBytes switch
+            {
+                [var unit, var function, var code] when (function & 0x80) != 0 =>
+                    (1, "3-4", $"从站 {unit} 异常响应：功能码 0x{function & 0x7F:X2}，{(code switch { 1 => "非法功能", 2 => "非法数据地址", 3 => "非法数据值", _ => "其他异常" })}"),
+                [var unit, 0x03, var ah, var al, var nh, var nl, ..] =>
+                    (2, "5-6", $"从站 {unit} 读保持寄存器，起始地址 {ah << 8 | al}，数量 {nh << 8 | nl}"),
+                [var unit, 0x06, var ah, var al, var vh, var vl] =>
+                    (3, "7-8", $"从站 {unit} 写单个寄存器，地址 {ah << 8 | al}，值 {vh << 8 | vl}"),
+                [] => (4, "9", "空帧"),
+                _ => (5, "10", "未知帧"),
+            };
+        }
+    }
+
+    string FrameCode => string.Join("\n",
+        "string Describe(byte[] frame) => frame switch",
+        "{",
+        "    [var unit, var fc, var code] when (fc & 0x80) != 0 =>",
+        "        $\"从站 {unit} 异常响应：功能码 0x{fc & 0x7F:X2}，{ExceptionText(code)}\",",
+        "    [var unit, 0x03, var ah, var al, var nh, var nl, ..] =>",
+        "        $\"从站 {unit} 读保持寄存器，起始地址 {ah << 8 | al}，数量 {nh << 8 | nl}\",",
+        "    [var unit, 0x06, var ah, var al, var vh, var vl] =>",
+        "        $\"从站 {unit} 写单个寄存器，地址 {ah << 8 | al}，值 {vh << 8 | vl}\",",
+        "    [] => \"空帧\",",
+        "    _ => \"未知帧\",",
+        "};");
+
+    // ---- 演示 2：分数 ----
+    int score = 75;
+
+    (string Lines, string Text, string Range) GradeResult => score switch
+    {
+        >= 90 => ("3", "优", "90 ~ 100"),
+        >= 60 and < 90 => ("4", "及格", "60 ~ 89"),
+        _ => ("5", "不及格", "0 ~ 59"),
+    };
+
+    IReadOnlyList<ProportionSegment> GradeBar =>
+    [
+        new("fail", "不及格（0~59）", 60) { Tone = Tone.Danger },
+        new("pass", "及格（60~89）", 30) { Tone = Tone.Warning },
+        new("good", "优（90~100）", 11) { Tone = Tone.Success },
+    ];
+
+    const string GradeCode = """
+        var grade = score switch
+        {
+            >= 90 => "优",
+            >= 60 and < 90 => "及格",
+            _ => "不及格",
+        };
+        """;
+
+    // ---- 演示 3：类型与属性 ----
+    sealed record Point(int X, int Y);
+
+    static readonly (string Key, string Label, object? Value)[] objects =
+    [
+        ("n42", "42", 42), ("n7", "7", 7), ("hello", "\"hello\"", "hello"), ("hi", "\"Hi\"", "Hi"),
+        ("p05", "Point(0, 5)", new Point(0, 5)), ("p33", "Point(3, 3)", new Point(3, 3)), ("p12", "Point(1, 2)", new Point(1, 2)), ("null", "null", null),
+    ];
+
+    string objectKey = "n42";
+
+    (int Arm, string Lines, string Text) ObjectResult => objects.First(o => o.Key == objectKey).Value switch
+    {
+        null => (1, "3", "null"),
+        int n when n > 40 => (2, "4", $"大整数 {n}"),
+        int n => (3, "5", $"整数 {n}"),
+        string { Length: > 3 } s => (4, "6", $"长字符串 {s}"),
+        Point { X: 0 } p => (5, "7", $"在 Y 轴上的点 {p}"),
+        Point(var x, var y) when x == y => (6, "8", $"对角线点 ({x},{y})"),
+        _ => (7, "9", "其他"),
+    };
+
+    const string ObjectCode = """
+        string Describe(object? obj) => obj switch
+        {
+            null => "null",
+            int n when n > 40 => $"大整数 {n}",
+            int n => $"整数 {n}",
+            string { Length: > 3 } s => $"长字符串 {s}",
+            Point { X: 0 } p => $"在 Y 轴上的点 {p}",
+            Point(var x, var y) when x == y => $"对角线点 ({x},{y})",
+            _ => "其他",
+        };
+        """;
+
+    // ---- 演示 4：状态机 ----
+    enum MachineState { Idle, Running, Paused }
+
+    enum MachineCommand { Start, Pause, Stop }
+
+    MachineState machine = MachineState.Idle;
+    string machineLines = "";
+    string machineNote = "点命令按钮：看状态怎么变，以及匹配到哪一行。";
+
+    void Send(MachineCommand command)
+    {
+        var (next, line) = (machine, command) switch
+        {
+            (MachineState.Idle, MachineCommand.Start) => (MachineState.Running, "3"),
+            (MachineState.Running, MachineCommand.Pause) => (MachineState.Paused, "4"),
+            (MachineState.Paused, MachineCommand.Start) => (MachineState.Running, "5"),
+            (MachineState.Running or MachineState.Paused, MachineCommand.Stop) => (MachineState.Idle, "6"),
+            _ => (machine, "7"),
+        };
+        machineNote = next == machine && line == "7"
+            ? $"({machine}, {command}) 不满足任何一条规则：落到 _ 分支，状态保持 {machine}。"
+            : $"({machine}, {command}) → {next}。";
+        machine = next;
+        machineLines = line;
+    }
+
+    const string MachineCode = """
+        State Next(State state, Command command) => (state, command) switch
+        {
+            (State.Idle, Command.Start) => State.Running,
+            (State.Running, Command.Pause) => State.Paused,
+            (State.Paused, Command.Start) => State.Running,
+            (State.Running or State.Paused, Command.Stop) => State.Idle,
+            _ => state,
+        };
+        """;
+}

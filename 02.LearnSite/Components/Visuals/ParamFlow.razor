@@ -8,9 +8,11 @@
 @namespace LearnSite.Components.Visuals
 @inherits RuneComponent
 
-<Flex Direction="LayoutDirection.Column" Gap="SpaceScale.Md">
-    <CodeBlock @key="Mode" Code="@CurrentCode" Lang="csharp" HighlightLines="@Current.Lines" Copyable="false" />
-
+<div @attributes="Attrs.Merge(GridLayer)">
+  <div @attributes="Attrs.Merge(ColumnLayer)">
+    <CodeBlock @key="Mode" Code="@CurrentCode" Lang="csharp" HighlightLines="@Current.Lines" LineNumbers="true" Copyable="false" />
+  </div>
+  <div @attributes="Attrs.Merge(ColumnLayer)">
     <div @attributes="Attrs.Merge(StageLayer)">
         <div @attributes="Attrs.Merge(FrameLayer)">
             <Strong>🏠 调用方（Main）</Strong>
@@ -39,7 +41,8 @@
         <Button Disabled="@(step == steps.Length - 1)" @onclick="() => step++">下一步</Button>
         <Button Variant="ButtonVariant.Ghost" Tone="Tone.Neutral" Disabled="@(step == 0)" @onclick="() => step = 0">重来</Button>
     </Flex>
-</Flex>
+  </div>
+</div>
 
 @code {
     /// <summary>传递方式：value、ref、out。</summary>
@@ -99,7 +102,14 @@
         ],
     };
 
+    static readonly Attrs GridLayer = new() { Sx = Grid };
+    static readonly Attrs ColumnLayer = new() { Sx = Column };
     static readonly Attrs StageLayer = new() { Sx = Stage };
+
+    // 宽屏：左边代码、右边演示；窄屏上下排
+    static Style Grid => Css.Define(static () => new Style { Display = Display.Grid, GridTemplateColumns = "minmax(0, 1fr)", Gap = Space.Xl, [Breakpoints.Lg] = new() { GridTemplateColumns = "minmax(0, 1fr) minmax(0, 1.1fr)" } });
+
+    static Style Column => Css.Define(static () => new Style { Display = Display.Flex, FlexDirection = FlexDirection.Column, Gap = Space.Md, MinWidth = 0 });
     static readonly Attrs FrameLayer = new() { Sx = Frame };
     static readonly Attrs FrameDimLayer = new() { Sx = Sx.Of(Frame, Dim) };
     static readonly Attrs ArrowLayer = new() { Sx = Arrow };

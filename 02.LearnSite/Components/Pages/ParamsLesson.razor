@@ -8,18 +8,12 @@
     对应 01.CSharpSyntax 的第 2 课（RefOutIn）。
 *@
 
-<Container Size="ContainerSize.Lg" Padding="SpaceScale.None">
-    <Flex Direction="LayoutDirection.Column" Gap="SpaceScale.Xl">
-
-        <Prose Measure="false">
-            <H1>参数传递：默认、ref、out</H1>
-            <Paragraph>
-                把变量交给方法时，方法拿到的是什么？默认是<strong>一份复印件</strong>。想让方法真的改到你的变量，要用
-                <Code>ref</Code>；想让方法把结果"送回来"，用 <Code>out</Code>。Java 里没有这两个关键字，是 C# 的一个特色。
-            </Paragraph>
-        </Prose>
-
-        @* ---------- 演示 1 ---------- *@
+<LessonPage Title="参数传递：默认、ref、out">
+    <Intro>
+        把变量交给方法时，方法拿到的是什么？默认是<strong>一份复印件</strong>。想让方法真的改到你的变量，要用
+        <Code>ref</Code>；想让方法把结果"送回来"，用 <Code>out</Code>。Java 里没有这两个关键字，是 C# 的一个特色。
+    </Intro>
+    <ChildContent>
         <Card>
             <Header><Strong>演示 1：单步回放</Strong></Header>
             <ChildContent>
@@ -30,62 +24,57 @@
                         <ToggleItem Value="out">out</ToggleItem>
                     </ToggleGroup>
                     <ParamFlow Mode="@mode" />
-                    <Quiz Question="用默认方式调用 Add10(n)，方法里 p += 10，之后 n 是多少？"
-                          Options="@(new[] { "1", "11" })" Answer="0"
+                    <Quiz Question="用默认方式调用 Add10(n)，方法里 p += 10，之后 n 是多少？" Options="@(new[] { "1", "11" })" Answer="0"
                           Explain="默认是按值传递，p 是 n 的复印件，改复印件不影响原件，n 仍是 1。" />
                 </Flex>
             </ChildContent>
         </Card>
 
-        @* ---------- 演示 2 ---------- *@
-        <Card>
-            <Header><Strong>演示 2：交换两个数（ref 的经典用法）</Strong></Header>
-            <ChildContent>
-                <Flex Direction="LayoutDirection.Column" Gap="SpaceScale.Lg">
-                    <Flex Gap="SpaceScale.Lg" Align="ItemAlign.Center" Wrap="true">
-                        <Slot Name="a" Data="@a.ToString()" Changed="@swapped" />
-                        <span aria-hidden="true">⇄</span>
-                        <Slot Name="b" Data="@b.ToString()" Changed="@swapped" />
-                    </Flex>
-                    <Flex Gap="SpaceScale.Sm" Wrap="true">
-                        <Button Variant="ButtonVariant.Soft" Tone="Tone.Neutral" @onclick="SwapByValue">Swap(a, b)　不写 ref</Button>
-                        <Button Icon="Lucide.Repeat" @onclick="SwapByRef">Swap(ref a, ref b)</Button>
-                        <Button Variant="ButtonVariant.Ghost" Tone="Tone.Neutral" @onclick="ResetSwap">重来</Button>
-                    </Flex>
-                    <CodeBlock Code="@SwapCode" Lang="csharp" Copyable="false" />
-                    <Narration @key="@swapNote" Emoji="@(swapNote.Contains('✅') ? "🔁" : "🙅")">@swapNote</Narration>
+        <Demo Title="演示 2：交换两个数（ref 的经典用法）">
+            <Stage>
+                <Flex Gap="SpaceScale.Lg" Align="ItemAlign.Center" Wrap="true">
+                    <Slot Name="a" Data="@a.ToString()" Changed="@swapped" />
+                    <span aria-hidden="true">⇄</span>
+                    <Slot Name="b" Data="@b.ToString()" Changed="@swapped" />
                 </Flex>
-            </ChildContent>
-        </Card>
+                <Flex Gap="SpaceScale.Sm" Wrap="true">
+                    <Button Variant="ButtonVariant.Soft" Tone="Tone.Neutral" @onclick="SwapByValue">Swap(a, b)　不写 ref</Button>
+                    <Button Icon="Lucide.Repeat" @onclick="SwapByRef">Swap(ref a, ref b)</Button>
+                    <Button Variant="ButtonVariant.Ghost" Tone="Tone.Neutral" @onclick="ResetSwap">重来</Button>
+                </Flex>
+                <Narration @key="@swapNote" Emoji="@(swapNote.Contains('✅') ? "🔁" : "🙅")">@swapNote</Narration>
+            </Stage>
+            <Side>
+                <CodeBlock Code="@SwapCode" Lang="csharp" Copyable="false" />
+            </Side>
+        </Demo>
 
-        <Card>
-            <Header><Strong>演示 3：out 的真实用法——TryParse</Strong></Header>
-            <ChildContent>
-                <Flex Direction="LayoutDirection.Column" Gap="SpaceScale.Lg">
-                    <Field Label="输入一段文字，试试能不能变成整数">
-                        <TextField @bind-Value="text" />
-                    </Field>
-                    <Flex Gap="SpaceScale.Sm" Wrap="true">
-                        <Button Variant="ButtonVariant.Soft" Tone="Tone.Neutral" @onclick="@(() => text = "42")">42</Button>
-                        <Button Variant="ButtonVariant.Soft" Tone="Tone.Neutral" @onclick="@(() => text = "abc")">abc</Button>
-                        <Button Variant="ButtonVariant.Soft" Tone="Tone.Neutral" @onclick="@(() => text = "3.14")">3.14</Button>
-                        <Button Variant="ButtonVariant.Soft" Tone="Tone.Neutral" @onclick="@(() => text = "")">（空）</Button>
-                    </Flex>
-                    <Grid MinItemWidth="CssLength.Rem(16)" Gap="SpaceScale.Sm">
-                        <Readout Title="int.TryParse(text, out var n)" Value="@TryParseResult" />
-                        <Readout Title="int.Parse(text)" Value="@ParseResult" />
-                    </Grid>
-                    <CodeBlock Code="@TryParseCode" Lang="csharp" Copyable="false" />
-                    <Narration Emoji="🧯">
-                        <Code>TryParse</Code> 用<strong>返回值</strong>告诉你成不成功，用 <Code>out</Code> 参数把<strong>结果</strong>送出来，失败时不抛异常，
-                        所以解析用户输入、串口收到的文本，一律用它；<Code>int.Parse</Code> 遇到不能解析的文字会直接抛异常。
-                    </Narration>
-                    <Quiz Question="调用 int.TryParse(text, out var n) 之前，n 需要先赋值吗？"
-                          Options="@(new[] { "需要", "不需要" })" Answer="1"
-                          Explain="out 参数在调用前可以没有值，方法保证在返回前给它赋值（失败时赋的是 0）。这正是 out 和 ref 最大的区别。" />
+        <Demo Title="演示 3：out 的真实用法——TryParse">
+            <Stage>
+                <Field Label="输入一段文字，试试能不能变成整数">
+                    <TextField @bind-Value="text" />
+                </Field>
+                <Flex Gap="SpaceScale.Sm" Wrap="true">
+                    <Button Variant="ButtonVariant.Soft" Tone="Tone.Neutral" @onclick="@(() => text = "42")">42</Button>
+                    <Button Variant="ButtonVariant.Soft" Tone="Tone.Neutral" @onclick="@(() => text = "abc")">abc</Button>
+                    <Button Variant="ButtonVariant.Soft" Tone="Tone.Neutral" @onclick="@(() => text = "3.14")">3.14</Button>
+                    <Button Variant="ButtonVariant.Soft" Tone="Tone.Neutral" @onclick="@(() => text = "")">（空）</Button>
                 </Flex>
-            </ChildContent>
-        </Card>
+                <Grid MinItemWidth="CssLength.Rem(16)" Gap="SpaceScale.Sm">
+                    <Readout Title="int.TryParse(text, out var n)" Value="@TryParseResult" />
+                    <Readout Title="int.Parse(text)" Value="@ParseResult" />
+                </Grid>
+            </Stage>
+            <Side>
+                <CodeBlock Code="@TryParseCode" Lang="csharp" Copyable="false" />
+                <Narration Emoji="🧯">
+                    <Code>TryParse</Code> 用<strong>返回值</strong>告诉你成不成功，用 <Code>out</Code> 参数把<strong>结果</strong>送出来，失败时不抛异常，
+                    所以解析用户输入、串口收到的文本，一律用它；<Code>int.Parse</Code> 遇到不能解析的文字会直接抛异常。
+                </Narration>
+                <Quiz Question="调用 int.TryParse(text, out var n) 之前，n 需要先赋值吗？" Options="@(new[] { "需要", "不需要" })" Answer="1"
+                      Explain="out 参数在调用前可以没有值，方法保证在返回前给它赋值（失败时赋的是 0）。这正是 out 和 ref 最大的区别。" />
+            </Side>
+        </Demo>
 
         <Prose Measure="false">
             <H2>四种方式对比</H2>
@@ -107,8 +96,8 @@
                 想连变量本身都换掉，同样要用 <Code>ref</Code>。
             </Paragraph>
         </Prose>
-    </Flex>
-</Container>
+    </ChildContent>
+</LessonPage>
 
 @code {
     // ---- 演示 1 ----

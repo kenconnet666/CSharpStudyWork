@@ -1,0 +1,232 @@
+@page "/classes"
+@inherits RuneComponent
+
+@*
+    语法精讲 2：类与对象——属性（对比公开字段）、record 的值相等与 with、init/required。对应 01.CSharpSyntax 第 3 课。
+    页面里的类都是真实定义的，演示里的结果是真的调用出来的。
+*@
+
+<LessonPage Title="类与对象：属性、record、init / required">
+    <Intro>
+        <strong>属性</strong>是 C# 相对 Java 最大的语法差异：看起来像字段，其实是方法，可以在赋值时校验。
+        <strong>record</strong> 是专门装数据的类型，自带"按内容比较"和"复制并修改"。
+        <Code>init</Code> 和 <Code>required</Code> 让配置对象"只能在创建时设置、而且必须设置"。
+    </Intro>
+    <ChildContent>
+        @* ---------- 演示 1：属性 ---------- *@
+        <Demo Title="演示 1：公开字段 vs 属性（带校验）">
+            <Stage>
+                <ToggleGroup @bind-Value="motorKind" Required="true" aria-label="写法">
+                    <ToggleItem Value="field">公开字段 public int Speed;</ToggleItem>
+                    <ToggleItem Value="property">属性 Speed { get; set; } + 校验</ToggleItem>
+                </ToggleGroup>
+                <Field Label="@($"要设置的转速：{speedInput}")">
+                    <Slider TValue="int" @bind-Value="speedInput" Min="-50" Max="200" />
+                </Field>
+                <Flex Gap="SpaceScale.Sm" Wrap="true">
+                    <Button Icon="Lucide.Pencil" @onclick="SetSpeed">motor.Speed = @speedInput</Button>
+                    <Button Variant="ButtonVariant.Ghost" Tone="Tone.Neutral" @onclick="ResetMotor">重来</Button>
+                </Flex>
+                <Flex Gap="SpaceScale.Lg" Align="ItemAlign.Center" Wrap="true">
+                    <Slot @key="@($"speed{storedSpeed}")" Name="@(motorKind == "field" ? "Speed（字段，谁都能改）" : "_speed（私有字段）")" Data="@storedSpeed.ToString()" Changed="@(storedSpeed < 0)" />
+                    @if (motorError is not null)
+                    {
+                        <Alert Tone="Tone.Danger">@motorError</Alert>
+                    }
+                </Flex>
+            </Stage>
+            <Side>
+                <CodeBlock @key="motorKind" Code="@MotorCode" Lang="csharp" Copyable="false" />
+                <Narration @key="@($"{motorKind}{storedSpeed}{motorError}")" Emoji="@(motorError is null ? "📝" : "🚫")">@MotorNote</Narration>
+                <Quiz Question="属性 public int Speed { get; set; } 和公开字段 public int Speed; 用起来写法一样，区别是？" Options="@(new[] { "属性更快", "属性在赋值/读取时能执行代码（校验、通知）", "字段不能被读取" })" Answer="1"
+                      Explain="属性背后是 get/set 两个方法，可以在 set 里校验、在 get 里计算；将来加校验也不用改调用方的代码。公开字段做不到这些，所以几乎都用属性。" />
+            </Side>
+        </Demo>
+
+        @* ---------- 演示 2：record ---------- *@
+        <Demo Title="演示 2：record 与 class 的“相等”">
+            <Stage>
+                <Flex Gap="SpaceScale.Md" Align="ItemAlign.End" Wrap="true">
+                    <Field Label="Name"><TextField @bind-Value="personName" /></Field>
+                    <Field Label="@($"Age = {personAge}")"><Slider TValue="int" @bind-Value="personAge" Min="0" Max="100" /></Field>
+                </Flex>
+                <Paragraph Tone="TextTone.Muted">用同样的内容各创建两个对象，比一比：</Paragraph>
+                <Grid MinItemWidth="CssLength.Rem(14)" Gap="SpaceScale.Sm">
+                    <Readout Title="record：r1 == r2" Value="@((RecordPair.R1 == RecordPair.R2).ToString())" />
+                    <Readout Title="class：c1 == c2" Value="@((ClassPair.C1 == ClassPair.C2).ToString())" />
+                    <Readout Title="record：ReferenceEquals" Value="@ReferenceEquals(RecordPair.R1, RecordPair.R2).ToString()" />
+                    <Readout Title="r1.ToString()" Value="@RecordPair.R1.ToString()" />
+                </Grid>
+                <Flex Gap="SpaceScale.Sm" Wrap="true">
+                    <Button Icon="Lucide.Copy" @onclick="@(() => withCopy = RecordPair.R1 with { Age = 99 })">r3 = r1 with &#123; Age = 99 &#125;</Button>
+                    <Button Variant="ButtonVariant.Ghost" Tone="Tone.Neutral" @onclick="@(() => withCopy = null)">清除</Button>
+                </Flex>
+                @if (withCopy is not null)
+                {
+                    <Flex Gap="SpaceScale.Lg" Wrap="true">
+                        <Slot Name="r1（原对象，没变）" Data="@RecordPair.R1.ToString()" />
+                        <Slot @key="@withCopy.ToString()" Name="r3（复制并修改）" Data="@withCopy.ToString()" Changed="true" />
+                    </Flex>
+                }
+            </Stage>
+            <Side>
+                <CodeBlock Code="@RecordCode" Lang="csharp" Copyable="false" />
+                <Narration Emoji="🧬">
+                    <strong>record 比较的是内容，class 比较的是"是不是同一个对象"</strong>：两个内容一样的 record 相等，两个内容一样的 class 却不相等（除非自己重写 Equals）。
+                    <Code>with</Code> 复制出一份并改掉指定的成员，原对象不变——不可变数据的惯用写法。
+                </Narration>
+                <Quiz Question="两个成员值完全相同的普通 class 对象，用 == 比较的结果是？" Options="@(new[] { "True", "False" })" Answer="1"
+                      Explain="class 默认比较引用，它们是两个不同的对象，所以是 False。record 自动生成了按成员比较的 ==，所以是 True。" />
+            </Side>
+        </Demo>
+
+        @* ---------- 演示 3：init / required ---------- *@
+        <Demo Title="演示 3：init 与 required（模拟编译器的检查）">
+            <Stage>
+                <Paragraph Tone="TextTone.Muted">勾选你的代码做了哪些事，看编译器怎么说：</Paragraph>
+                <ToggleGroup SelectionMode="SelectionMode.Multiple" @bind-Values="optionActions" aria-label="代码做了什么">
+                    <ToggleItem Value="host">创建时设置 Host</ToggleItem>
+                    <ToggleItem Value="port">创建时设置 Port = 503</ToggleItem>
+                    <ToggleItem Value="reassign">创建之后又写 opts.Port = 504</ToggleItem>
+                </ToggleGroup>
+                <Alert @key="@OptionsVerdict.Message" Tone="@(OptionsVerdict.Ok ? Tone.Success : Tone.Danger)">@OptionsVerdict.Message</Alert>
+                @if (OptionsVerdict.Ok)
+                {
+                    <Flex Gap="SpaceScale.Lg" Wrap="true">
+                        <Slot Name="opts.Host" Data="192.168.0.10" />
+                        <Slot Name="opts.Port" Data="@(optionActions.Contains("port") ? "503" : "502（默认值）")" />
+                    </Flex>
+                }
+            </Stage>
+            <Side>
+                <CodeBlock Code="@OptionsCode" Lang="csharp" Copyable="false" />
+                <Narration Emoji="🔒">
+                    <Code>required</Code> 强制创建时必须赋值（忘了就编译不过），<Code>init</Code> 让属性<strong>只能在创建时赋值</strong>，之后不能再改。
+                    配上 <Code>new T &#123; ... &#125;</Code> 对象初始化器，写连接配置之类的类型特别舒服：不会漏填，也不会被中途改乱。
+                </Narration>
+                <Quiz Question="public required string Host { get; init; } 的含义是？" Options="@(new[] { "创建时必须设置，之后不能再改", "可以随时修改，也可以不填", "只能读取，不能设置" })" Answer="0"
+                      Explain="required 管“必须填”，init 管“只能创建时填”，两个合起来就是“必须在创建时填写，并且之后固定不变”。" />
+            </Side>
+        </Demo>
+    </ChildContent>
+</LessonPage>
+
+@code {
+    // ---- 演示 1：字段 vs 属性 ----
+    sealed class FieldMotor
+    {
+        public int Speed;   // 谁都能随便写
+    }
+
+    sealed class PropertyMotor
+    {
+        int _speed;
+
+        public int Speed
+        {
+            get => _speed;
+            set
+            {
+                if (value < 0) throw new ArgumentOutOfRangeException(nameof(value), "转速不能为负");
+                _speed = value;
+            }
+        }
+    }
+
+    string motorKind = "property";
+    int speedInput = 100;
+    int storedSpeed;
+    string? motorError;
+    readonly FieldMotor fieldMotor = new();
+    readonly PropertyMotor propertyMotor = new();
+
+    void SetSpeed()
+    {
+        motorError = null;
+        try
+        {
+            if (motorKind == "field")
+            {
+                fieldMotor.Speed = speedInput;
+                storedSpeed = fieldMotor.Speed;
+            }
+            else
+            {
+                propertyMotor.Speed = speedInput;
+                storedSpeed = propertyMotor.Speed;
+            }
+        }
+        catch (ArgumentOutOfRangeException ex)
+        {
+            motorError = $"抛出 {nameof(ArgumentOutOfRangeException)}：{ex.Message.Split('\n')[0]}";
+        }
+    }
+
+    void ResetMotor()
+    {
+        storedSpeed = 0;
+        motorError = null;
+    }
+
+    string MotorCode => motorKind == "field"
+        ? string.Join("\n", "class Motor", "{", "    public int Speed;   // 公开字段：没有任何保护", "}", "", $"motor.Speed = {speedInput};   // 照单全收，负数也行")
+        : string.Join("\n", "class Motor", "{", "    int _speed;", "    public int Speed", "    {", "        get => _speed;", "        set", "        {", "            if (value < 0) throw new ArgumentOutOfRangeException(nameof(value), \"转速不能为负\");", "            _speed = value;", "        }", "    }", "}", "", $"motor.Speed = {speedInput};   // 经过 set 里的校验");
+
+    string MotorNote => motorError is not null
+        ? "set 里的校验发现是负数，抛出了异常，<_speed> 没有被改。属性把\"赋值\"变成了一次带检查的方法调用。".Replace("<_speed>", "_speed")
+        : motorKind == "field"
+            ? storedSpeed < 0 ? "负的转速也被接受了：公开字段没有任何防线。这就是要用属性的原因。" : "字段直接存值，任何值都接受。把滑块拖到负数再设置，看看会怎样。"
+            : "值合法，set 把它存进了私有字段 _speed。把滑块拖到负数再设置，看看属性怎么拒绝。";
+
+    // ---- 演示 2：record vs class ----
+    sealed record PersonRecord(string Name, int Age);
+
+    sealed class PersonClass(string name, int age)
+    {
+        public string Name { get; } = name;
+
+        public int Age { get; } = age;
+    }
+
+    string personName = "张三";
+    int personAge = 28;
+    PersonRecord? withCopy;
+
+    (PersonRecord R1, PersonRecord R2) RecordPair => (new(personName, personAge), new(personName, personAge));
+
+    (PersonClass C1, PersonClass C2) ClassPair => (new(personName, personAge), new(personName, personAge));
+
+    string RecordCode => string.Join("\n",
+        "record PersonRecord(string Name, int Age);      // 一行定义，自带按内容比较",
+        "class PersonClass(string name, int age) { ... } // 普通 class",
+        "",
+        $"var r1 = new PersonRecord(\"{personName}\", {personAge});",
+        $"var r2 = new PersonRecord(\"{personName}\", {personAge});",
+        $"r1 == r2;   // {(RecordPair.R1 == RecordPair.R2)}",
+        "",
+        $"var c1 = new PersonClass(\"{personName}\", {personAge});",
+        $"var c2 = new PersonClass(\"{personName}\", {personAge});",
+        $"c1 == c2;   // {(ClassPair.C1 == ClassPair.C2)}（不是同一个对象）",
+        "",
+        "var r3 = r1 with { Age = 99 };   // 复制一份，只改 Age");
+
+    // ---- 演示 3：init / required ----
+    IReadOnlyList<string> optionActions = ["host"];
+
+    (bool Ok, string Message) OptionsVerdict =>
+        !optionActions.Contains("host") ? (false, "❌ 编译错误 CS9035：必须设置 required 成员 \"Host\"")
+        : optionActions.Contains("reassign") ? (false, "❌ 编译错误 CS8852：init-only 属性 \"Port\" 只能在对象初始化期间赋值")
+        : (true, "✅ 编译通过");
+
+    string OptionsCode => string.Join("\n",
+        "class ConnectionOptions",
+        "{",
+        "    public required string Host { get; init; }   // 必填、只能创建时设置",
+        "    public int Port { get; init; } = 502;         // 选填，有默认值",
+        "}",
+        "",
+        optionActions.Contains("host")
+            ? $"var opts = new ConnectionOptions {{ Host = \"192.168.0.10\"{(optionActions.Contains("port") ? ", Port = 503" : "")} }};"
+            : $"var opts = new ConnectionOptions {{ {(optionActions.Contains("port") ? "Port = 503" : "")} }};   // 没写 Host",
+        optionActions.Contains("reassign") ? "opts.Port = 504;   // 创建之后再改" : "");
+}

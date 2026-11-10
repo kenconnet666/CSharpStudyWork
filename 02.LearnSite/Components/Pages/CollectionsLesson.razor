@@ -1,0 +1,307 @@
+@page "/collections"
+@inherits RuneComponent
+
+@*
+    语法精讲 4：泛型与集合。对应 01.CSharpSyntax 第 5 课。
+      演示 1：集合操场——List / Dictionary / HashSet / Queue 各点几下，看内容怎么变
+      演示 2：环形缓冲区——固定容量，写满后覆盖最旧的（串口接收缓存的常用结构）
+      演示 3：yield 的惰性——取一个才算一个
+*@
+
+<LessonPage Title="泛型与集合：List、Dictionary、HashSet、Queue">
+    <Intro>
+        泛型 <Code>&lt;T&gt;</Code> 让同一份代码适用于不同类型，并保持类型安全；C# 的泛型是"真泛型"，运行时仍知道 <Code>T</Code> 是什么（Java 会擦除）。
+        集合就是装一堆数据的容器，选对容器，代码就简单：要顺序用 <Code>List</Code>，按名字找用 <Code>Dictionary</Code>，去重用 <Code>HashSet</Code>，先进先出用 <Code>Queue</Code>。
+    </Intro>
+    <ChildContent>
+        @* ---------- 演示 1：集合操场 ---------- *@
+        <Demo Title="演示 1：集合操场">
+            <Stage>
+                <ToggleGroup @bind-Value="kind" Required="true" aria-label="选一种集合">
+                    <ToggleItem Value="list">List&lt;int&gt;</ToggleItem>
+                    <ToggleItem Value="dict">Dictionary&lt;string,int&gt;</ToggleItem>
+                    <ToggleItem Value="set">HashSet&lt;int&gt;</ToggleItem>
+                    <ToggleItem Value="queue">Queue&lt;string&gt;</ToggleItem>
+                </ToggleGroup>
+
+                <Flex Gap="SpaceScale.Sm" Wrap="true">
+                    @switch (kind)
+                    {
+                        case "list":
+                            <Button Icon="Lucide.Plus" @onclick="@(() => Act("Add"))">Add(n)</Button>
+                            <Button Variant="ButtonVariant.Soft" @onclick="@(() => Act("Insert"))">Insert(0, n)</Button>
+                            <Button Variant="ButtonVariant.Soft" @onclick="@(() => Act("RemoveAt"))">RemoveAt(0)</Button>
+                            <Button Variant="ButtonVariant.Soft" @onclick="@(() => Act("Contains"))">Contains(3)</Button>
+                            break;
+                        case "dict":
+                            <Button Icon="Lucide.Plus" @onclick="@(() => Act("SetSpeed"))">["Speed"] = n</Button>
+                            <Button Variant="ButtonVariant.Soft" @onclick="@(() => Act("TrySpeed"))">TryGetValue("Speed")</Button>
+                            <Button Variant="ButtonVariant.Soft" @onclick="@(() => Act("TryMissing"))">TryGetValue("Missing")</Button>
+                            <Button Variant="ButtonVariant.Soft" Tone="Tone.Danger" @onclick="@(() => Act("DirectMissing"))">["Missing"] 直接取</Button>
+                            break;
+                        case "set":
+                            <Button Icon="Lucide.Plus" @onclick="@(() => Act("AddNew"))">Add(新数)</Button>
+                            <Button Variant="ButtonVariant.Soft" @onclick="@(() => Act("AddDup"))">Add(2)　重复的</Button>
+                            <Button Variant="ButtonVariant.Soft" @onclick="@(() => Act("Remove"))">Remove(2)</Button>
+                            break;
+                        default:
+                            <Button Icon="Lucide.Plus" @onclick="@(() => Act("Enqueue"))">Enqueue(命令)</Button>
+                            <Button Variant="ButtonVariant.Soft" @onclick="@(() => Act("Dequeue"))">Dequeue()</Button>
+                            break;
+                    }
+                    <Button Variant="ButtonVariant.Ghost" Tone="Tone.Neutral" @onclick="ResetCollections">重来</Button>
+                </Flex>
+
+                <Flex Gap="SpaceScale.Sm" Wrap="true" Align="ItemAlign.Center">
+                    @if (kind == "queue")
+                    {
+                        <Small Tone="TextTone.Muted">出口 ➜</Small>
+                    }
+                    @foreach (var (label, value) in Items)
+                    {
+                        <Slot @key="@($"{kind}{label}{value}")" Name="@label" Data="@value" Changed="@(label == highlight)" />
+                    }
+                    @if (kind == "queue")
+                    {
+                        <Small Tone="TextTone.Muted">➜ 入口</Small>
+                    }
+                    @if (Items.Count == 0)
+                    {
+                        <Small Tone="TextTone.Muted">（空）</Small>
+                    }
+                </Flex>
+                <Narration @key="@result" Emoji="@(resultBad ? "💥" : "📦")">@result</Narration>
+            </Stage>
+            <Side>
+                <CodeBlock Code="@PlaygroundCode" Lang="csharp" Title="你刚才执行的代码" Copyable="false" />
+                <Narration @key="kind" Emoji="🧭">@((MarkupString)KindAdvice)</Narration>
+                <Quiz Question="Dictionary 里没有这个键时，dict[“Missing”] 会怎样？" Options="@(new[] { "返回 null", "返回 0", "抛出 KeyNotFoundException" })" Answer="2"
+                      Explain="直接用索引取不存在的键会抛异常。不确定键在不在时，用 TryGetValue（返回 bool + out 值）或 GetValueOrDefault。" />
+            </Side>
+        </Demo>
+
+        @* ---------- 演示 2：环形缓冲区 ---------- *@
+        <Demo Title="演示 2：环形缓冲区（容量 3）">
+            <Stage>
+                <Flex Gap="SpaceScale.Sm" Wrap="true">
+                    <Button Icon="Lucide.Plus" @onclick="AddToRing">Add(@(ringNext))</Button>
+                    <Button Variant="ButtonVariant.Ghost" Tone="Tone.Neutral" @onclick="ResetRing">重来</Button>
+                </Flex>
+                <Flex Gap="SpaceScale.Md" Wrap="true">
+                    @for (var i = 0; i < ring.Capacity; i++)
+                    {
+                        var index = i;
+                        <div>
+                            <Small Tone="TextTone.Muted">@(index == ring.Next ? "▼ 下一个写这里" : " ")</Small>
+                            <Slot @key="@($"{index}{ring.Items[index]}")" Name="@($"槽 {index}")" Data="@(ring.Written > index || ring.Written >= ring.Capacity ? ring.Items[index].ToString() : "（空）")" Changed="@(index == (ring.Next + ring.Capacity - 1) % ring.Capacity && ring.Written > 0)" />
+                        </div>
+                    }
+                </Flex>
+                <Readout Title="按时间顺序（最旧 → 最新）" Value="@(ring.Written == 0 ? "（还没有数据）" : string.Join(", ", ring.ToOrdered()))" />
+            </Stage>
+            <Side>
+                <CodeBlock Code="@RingCode" Lang="csharp" Copyable="false" />
+                <Narration @key="ringNext" Emoji="🔄">
+                    容量固定为 3，写满以后<strong>覆盖最旧的</strong>，内存不会无限增长——串口源源不断地收数据，只保留最近的一批，就用它。
+                    关键是 <Code>_next = (_next + 1) % 容量</Code>：下标走到末尾后用取余绕回 0。注意数组里的顺序<strong>不是</strong>时间顺序，所以取出来时要从 <Code>_next</Code> 开始绕一圈。
+                </Narration>
+                <Quiz Question="容量 3，依次 Add 1、2、3、4、5 后，按时间顺序是？" Options="@(new[] { "1, 2, 3", "3, 4, 5", "4, 5, 3" })" Answer="1"
+                      Explain="最旧的 1、2 被 4、5 覆盖了，剩下 3、4、5；数组里实际存的是 [4, 5, 3]（4 覆盖了槽 0），按时间顺序取出才是 3, 4, 5。" />
+            </Side>
+        </Demo>
+
+        @* ---------- 演示 3：yield ---------- *@
+        <TraceDemo Title="演示 3：yield return——取一个才算一个（惰性）" Code="@YieldCode" Steps="yieldSteps">
+            <Extra>
+                <Quiz Question="foreach 遇到 break 之后，Evens(100) 里没取过的 6、8、10…… 会被计算吗？" Options="@(new[] { "会，全部算完", "不会，根本没执行" })" Answer="1"
+                      Explain="yield 方法是按需执行的：foreach 每取一个，才执行到下一个 yield return 暂停。break 之后不再取，剩下的代码永远不会运行。所以它能表示无限序列，也不占内存。" />
+            </Extra>
+        </TraceDemo>
+    </ChildContent>
+</LessonPage>
+
+@code {
+    // ---- 演示 1：集合操场 ----
+    string kind = "list";
+    int counter = 10;
+    string result = "点上面的按钮操作这个集合。";
+    bool resultBad;
+    string? highlight;
+
+    readonly List<int> list = [3, 1, 4];
+    readonly Dictionary<string, int> dict = new() { ["Temperature"] = 365, ["Pressure"] = 101 };
+    readonly HashSet<int> set = [1, 2, 3];
+    readonly Queue<string> queue = new(["读温度", "读压力"]);
+    readonly Dictionary<string, List<string>> logs = new() { ["list"] = [], ["dict"] = [], ["set"] = [], ["queue"] = [] };
+
+    List<(string Label, string Value)> Items => kind switch
+    {
+        "list" => [.. list.Select((v, i) => ($"[{i}]", v.ToString()))],
+        "dict" => [.. dict.Select(p => (p.Key, p.Value.ToString()))],
+        "set" => [.. set.Select(v => ("元素", v.ToString()))],
+        _ => [.. queue.Select((v, i) => (i == 0 ? "队首" : $"第 {i + 1} 个", v))],
+    };
+
+    void Log(string statement, string outcome) => logs[kind].Add($"{statement}   // {outcome}");
+
+    void Act(string action)
+    {
+        resultBad = false;
+        highlight = null;
+        var n = ++counter;
+        switch (action)
+        {
+            case "Add": list.Add(n); highlight = $"[{list.Count - 1}]"; Log($"list.Add({n});", $"追加到末尾，Count = {list.Count}"); result = $"追加了 {n}，放在末尾。"; break;
+            case "Insert": list.Insert(0, n); highlight = "[0]"; Log($"list.Insert(0, {n});", "插到最前面，后面的整体后移"); result = $"插入到下标 0，原来的元素都往后挪了一位（所以 Insert 比 Add 慢）。"; break;
+            case "RemoveAt":
+                if (list.Count == 0) { resultBad = true; Log("list.RemoveAt(0);", "💥 抛出 ArgumentOutOfRangeException"); result = "列表是空的，RemoveAt(0) 抛出了 ArgumentOutOfRangeException。"; }
+                else { var removed = list[0]; list.RemoveAt(0); Log("list.RemoveAt(0);", $"删掉了 {removed}"); result = $"删掉了下标 0 的 {removed}，后面的整体前移。"; }
+                break;
+            case "Contains": var has = list.Contains(3); Log("list.Contains(3);", has.ToString()); result = has ? "有 3。" : "没有 3。"; break;
+
+            case "SetSpeed": dict["Speed"] = n; highlight = "Speed"; Log($"dict[\"Speed\"] = {n};", "不存在就新增，存在就覆盖"); result = $"Speed = {n}：键不存在时新增，存在时覆盖。"; break;
+            case "TrySpeed": var found = dict.TryGetValue("Speed", out var speed); Log("dict.TryGetValue(\"Speed\", out var speed);", $"{found}, speed = {speed}"); result = found ? $"找到了，speed = {speed}。" : "没找到：返回 false，speed 是默认值 0，不会抛异常。"; break;
+            case "TryMissing": var ok = dict.TryGetValue("Missing", out var missing); Log("dict.TryGetValue(\"Missing\", out var missing);", $"{ok}, missing = {missing}"); result = "没找到：返回 false，missing 是默认值 0，不会抛异常。"; break;
+            case "DirectMissing":
+                try { _ = dict["Missing"]; }
+                catch (KeyNotFoundException) { resultBad = true; Log("var v = dict[\"Missing\"];", "💥 抛出 KeyNotFoundException"); result = "直接用索引取不存在的键：抛出了 KeyNotFoundException。不确定在不在，就用 TryGetValue。"; }
+                break;
+
+            case "AddNew": var added = set.Add(n); highlight = "元素"; Log($"set.Add({n});", added.ToString()); result = $"{n} 是新元素：加进去了，返回 true。"; break;
+            case "AddDup": var dup = set.Add(2); Log("set.Add(2);", dup.ToString()); result = dup ? "2 原来不在，加进去了。" : "2 已经在集合里：什么也没变，返回 false。HashSet 自动去重。"; break;
+            case "Remove": var removedFlag = set.Remove(2); Log("set.Remove(2);", removedFlag.ToString()); result = removedFlag ? "删掉了 2。" : "里面没有 2，什么也没删。"; break;
+
+            case "Enqueue": var command = $"命令{n}"; queue.Enqueue(command); highlight = queue.Count == 1 ? "队首" : $"第 {queue.Count} 个"; Log($"queue.Enqueue(\"{command}\");", "排到队尾"); result = $"{command} 排到了队尾。"; break;
+            case "Dequeue":
+                if (queue.Count == 0) { resultBad = true; Log("queue.Dequeue();", "💥 抛出 InvalidOperationException"); result = "队列是空的，Dequeue 抛出了 InvalidOperationException。不确定时用 TryDequeue。"; }
+                else { var first = queue.Dequeue(); Log("queue.Dequeue();", $"取出 \"{first}\""); result = $"从队首取出 \"{first}\"：先进先出，最早排进来的最先出去。"; }
+                break;
+        }
+    }
+
+    void ResetCollections()
+    {
+        list.Clear(); list.AddRange([3, 1, 4]);
+        dict.Clear(); dict["Temperature"] = 365; dict["Pressure"] = 101;
+        set.Clear(); set.UnionWith([1, 2, 3]);
+        queue.Clear(); queue.Enqueue("读温度"); queue.Enqueue("读压力");
+        foreach (var log in logs.Values) log.Clear();
+        counter = 10;
+        highlight = null;
+        resultBad = false;
+        result = "已恢复初始内容。";
+    }
+
+    string PlaygroundCode
+    {
+        get
+        {
+            var init = kind switch
+            {
+                "list" => "List<int> list = [3, 1, 4];",
+                "dict" => "Dictionary<string, int> dict = new() { [\"Temperature\"] = 365, [\"Pressure\"] = 101 };",
+                "set" => "HashSet<int> set = [1, 2, 3];",
+                _ => "Queue<string> queue = new([\"读温度\", \"读压力\"]);",
+            };
+            var done = logs[kind];
+            return done.Count == 0 ? init + "\n// 点左边的按钮，对应的语句会出现在这里" : init + "\n" + string.Join("\n", done.TakeLast(8));
+        }
+    }
+
+    string KindAdvice => kind switch
+    {
+        "list" => "<code>List&lt;T&gt;</code>：有顺序、可按下标访问，末尾追加快，中间插入/删除要挪动后面的元素。数组用 <code>.Length</code>，List 用 <code>.Count</code>。",
+        "dict" => "<code>Dictionary</code>：按键找值，很快。读寄存器地址 → 值、设备名 → 配置，都用它。取值优先 <code>TryGetValue</code>。",
+        "set" => "<code>HashSet&lt;T&gt;</code>：不重复的集合，判断\"在不在\"很快。<code>Add</code> 返回 bool 告诉你是不是新元素。",
+        _ => "<code>Queue&lt;T&gt;</code>：先进先出。待发送的指令排队、接收到的帧排队处理，都用它。",
+    };
+
+    // ---- 演示 2：环形缓冲区 ----
+    sealed class RingBuffer(int capacity)
+    {
+        public int Capacity { get; } = capacity;
+
+        public int[] Items { get; } = new int[capacity];
+
+        public int Next { get; private set; }
+
+        public int Written { get; private set; }
+
+        public void Add(int value)
+        {
+            Items[Next] = value;
+            Next = (Next + 1) % Capacity;
+            Written++;
+        }
+
+        public IEnumerable<int> ToOrdered()
+        {
+            var count = Math.Min(Written, Capacity);
+            var start = Written < Capacity ? 0 : Next;
+            for (var i = 0; i < count; i++) yield return Items[(start + i) % Capacity];
+        }
+    }
+
+    RingBuffer ring = new(3);
+    int ringNext = 1;
+    readonly List<int> ringAdded = [];
+
+    void AddToRing()
+    {
+        ring.Add(ringNext);
+        ringAdded.Add(ringNext);
+        ringNext++;
+    }
+
+    void ResetRing()
+    {
+        ring = new RingBuffer(3);
+        ringNext = 1;
+        ringAdded.Clear();
+    }
+
+    string RingCode => string.Join("\n",
+        "class RingBuffer(int capacity)",
+        "{",
+        "    int[] _items = new int[capacity];",
+        "    int _next;",
+        "",
+        "    public void Add(int value)",
+        "    {",
+        "        _items[_next] = value;",
+        "        _next = (_next + 1) % _items.Length;   // 走到末尾就绕回 0",
+        "    }",
+        "}",
+        "",
+        ringAdded.Count == 0 ? "// 点左边的 Add" : string.Join("\n", ringAdded.TakeLast(6).Select(v => $"ring.Add({v});")),
+        $"// 数组里现在是 [{string.Join(", ", ring.Items)}]，下一个写入的位置 _next = {ring.Next}");
+
+    // ---- 演示 3：yield ----
+    const string YieldCode = """
+        static IEnumerable<int> Evens(int limit)
+        {
+            for (var i = 0; i <= limit; i += 2)
+            {
+                Console.WriteLine($"算出 {i}");
+                yield return i;
+            }
+        }
+
+        foreach (var n in Evens(100))
+        {
+            if (n >= 4) break;
+            Console.WriteLine($"用到 {n}");
+        }
+        """;
+
+    static readonly IReadOnlyList<TraceDemo.TraceStep> yieldSteps =
+    [
+        new("foreach 开始", "10", [], "🏁", "<code>Evens(100)</code> 被调用了，但它里面的代码<strong>一行都还没执行</strong>：yield 方法只是返回了一个“待执行”的序列。"),
+        new("第一次取值", "3,5,6", ["算出 0"], "⏸️", "foreach 向序列要第一个值，<code>Evens</code> 开始执行，算出 0，遇到 <code>yield return</code> 就<strong>暂停</strong>，把 0 交给 foreach。", [("i", "0")]),
+        new("使用 n = 0", "12,13", ["算出 0", "用到 0"], "🛠️", "foreach 拿到 0，0 不小于 4，继续往下用。", [("n", "0")]),
+        new("第二次取值", "3,5,6", ["算出 0", "用到 0", "算出 2"], "⏸️", "foreach 再要一个，<code>Evens</code> 从<strong>刚才暂停的地方</strong>继续，i += 2 得 2，又暂停。", [("i", "2")]),
+        new("使用 n = 2", "13", ["算出 0", "用到 0", "算出 2", "用到 2"], "🛠️", "用到 2。", [("n", "2")]),
+        new("第三次取值", "3,5,6", ["算出 0", "用到 0", "算出 2", "用到 2", "算出 4"], "⏸️", "再取一个，算出 4。", [("i", "4")]),
+        new("遇到 break", "12", ["算出 0", "用到 0", "算出 2", "用到 2", "算出 4"], "🛑", "n = 4，满足 <code>n >= 4</code>，break 跳出循环。<strong>6、8、10…… 根本没被计算</strong>——要多少才算多少。", [("n", "4")]),
+    ];
+}

@@ -8,24 +8,18 @@
     "栈上的变量"与"堆上的对象"这样画是教学简化，不是真实内存布局。
 *@
 
-<Container Size="ContainerSize.Lg" Padding="SpaceScale.None">
-    <Flex Direction="LayoutDirection.Column" Gap="SpaceScale.Xl">
-
-        <Prose Measure="false">
-            <H1>值类型 vs 引用类型</H1>
-            <Paragraph>
-                <Code>int</Code>、<Code>double</Code>、<Code>struct</Code> 这类<strong>值类型</strong>，变量里直接装着数据，赋值就是复制一份。
-                <Code>class</Code>、数组 这类<strong>引用类型</strong>，变量里装的是"指向对象的地址"，赋值只是多了一个指向同一个对象的地址。
-            </Paragraph>
-        </Prose>
-
+<LessonPage Title="值类型 vs 引用类型">
+    <Intro>
+        <Code>int</Code>、<Code>double</Code>、<Code>struct</Code> 这类<strong>值类型</strong>，变量里直接装着数据，赋值就是复制一份。
+        <Code>class</Code>、数组 这类<strong>引用类型</strong>，变量里装的是"指向对象的地址"，赋值只是多了一个指向同一个对象的地址。
+    </Intro>
+    <ChildContent>
         <Narration Emoji="📄">
             打个比方：<strong>值类型 = 复印一份文件</strong>，你在复印件上涂改，原件不受影响；
             <strong>引用类型 = 给同一份在线文档发一个链接</strong>，谁通过链接修改，所有人看到的都变了。
         </Narration>
 
-        <Grid MinItemWidth="CssLength.Rem(22)" Gap="SpaceScale.Lg">
-            @* ---------------- struct ---------------- *@
+        <Grid MinItemWidth="CssLength.Rem(26)" Gap="SpaceScale.Lg">
             <Card>
                 <Header><Strong>struct（值类型）：复印件</Strong></Header>
                 <ChildContent>
@@ -48,7 +42,6 @@
                 </ChildContent>
             </Card>
 
-            @* ---------------- class ---------------- *@
             <Card>
                 <Header><Strong>class（引用类型）：同一份在线文档</Strong></Header>
                 <ChildContent>
@@ -63,21 +56,23 @@
                     </Flex>
                 </ChildContent>
             </Card>
+
+            <Card>
+                <Header><Strong>你刚才执行的代码</Strong></Header>
+                <ChildContent>
+                    <CodeBlock Code="@Code" Lang="csharp" LineNumbers="true" />
+                </ChildContent>
+            </Card>
         </Grid>
 
-        <CodeBlock Code="@Code" Lang="csharp" Title="你刚才执行的代码" />
-
-        <Flex Direction="LayoutDirection.Column" Gap="SpaceScale.Md">
-            <Quiz Question="执行完 c2.X = 99 之后，c1.X 是多少？"
-                  Options="@(new[] { "1", "99" })" Answer="1"
+        <Grid MinItemWidth="CssLength.Rem(24)" Gap="SpaceScale.Md">
+            <Quiz Question="执行完 c2.X = 99 之后，c1.X 是多少？" Options="@(new[] { "1", "99" })" Answer="1"
                   Explain="c1 和 c2 是指向同一个对象的两个引用，通过 c2 改对象，c1 看到的当然也变了。" />
-            <Quiz Question="执行完 s2.X = 99 之后，s1.X 是多少？"
-                  Options="@(new[] { "1", "99" })" Answer="0"
+            <Quiz Question="执行完 s2.X = 99 之后，s1.X 是多少？" Options="@(new[] { "1", "99" })" Answer="0"
                   Explain="struct 赋值复制了一整份，s2 是独立的复印件，改它不影响 s1。" />
-            <Quiz Question="string 是引用类型。var b = a; b += “!”; 之后，a 会变吗？"
-                  Options="@(new[] { "会变", "不会变" })" Answer="1"
+            <Quiz Question="string 是引用类型。var b = a; b += “!”; 之后，a 会变吗？" Options="@(new[] { "会变", "不会变" })" Answer="1"
                   Explain="string 不可变：b += “!” 不是修改原来的字符串，而是造了一个新字符串让 b 指向它，a 仍指向旧的。所以 string 虽然是引用类型，用起来像值类型。" />
-        </Flex>
+        </Grid>
 
         <Prose Measure="false">
             <H2>要记住的</H2>
@@ -88,8 +83,8 @@
                 <li>record 默认是引用类型，但 <Code>==</Code> 比较的是内容；<Code>record struct</Code> 才是值类型。</li>
             </ul>
         </Prose>
-    </Flex>
-</Container>
+    </ChildContent>
+</LessonPage>
 
 @code {
     // ---- struct ----

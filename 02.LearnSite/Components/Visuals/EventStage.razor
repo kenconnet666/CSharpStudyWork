@@ -1,0 +1,181 @@
+@*
+    事件的"发布—订阅"舞台：左边是发布者（串口），右边是三个订阅者；订阅了的有一根实线箭头连着，没订阅的是虚线。
+    点"触发"后一封信沿着每根实线飞向订阅者，到了才在订阅者那里留下"收到 ……"；没有订阅者时触发，信根本发不出去。
+    下面的代码会随你的每一步操作增加，展示对应的 C# 语句；解说气泡说明"刚才为什么会这样"。
+    舞台用固定大小（560×270 像素）和绝对定位，箭头坐标不会随窗口缩放错位。
+*@
+@namespace LearnSite.Components.Visuals
+@inherits RuneComponent
+
+<div @attributes="Attrs.Merge(GridLayer)">
+<div @attributes="Attrs.Merge(ColumnLayer)">
+    <div style="position:relative;width:560px;max-width:100%;height:270px">
+        <svg width="560" height="270" viewBox="0 0 560 270" style="position:absolute;inset:0;pointer-events:none" aria-hidden="true">
+            <defs>
+                <marker id="ev-arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+                    <path d="M0,0 L10,5 L0,10 z" fill="currentColor" />
+                </marker>
+            </defs>
+            @foreach (var sub in subs)
+            {
+                var on = subscribed.Contains(sub.Id);
+                <line @key="@((sub.Id, on))" x1="170" y1="130" x2="376" y2="@(sub.Top + 30)" stroke="currentColor" stroke-width="2"
+                      style="color:@(on ? Tones.Accent.Solid.ToString() : Colors.Border.ToString())" stroke-dasharray="@(on ? "none" : "5 5")" marker-end="@(on ? "url(#ev-arrow)" : null)" />
+            }
+        </svg>
+
+        <div style="position:absolute;left:8px;top:100px;width:162px">
+            <Slot Name="📡 串口（发布者）" Data="DataReceived 事件" Changed="@(subscribed.Count > 0)" />
+        </div>
+
+        @foreach (var sub in subs)
+        {
+            var id = sub.Id;
+            <div @key="@("box" + id)" style="position:absolute;left:380px;top:@(sub.Top)px;width:172px">
+                <Slot Name="@sub.Title" Data="@(last.TryGetValue(id, out var message) ? $"收到 {message}" : subscribed.Contains(id) ? "已订阅，等消息" : "（没订阅）")" Changed="@subscribed.Contains(id)" />
+            </div>
+        }
+
+        @* 飞行中的信：每封信用自己的位移（CSS 变量）飞向对应的订阅者 *@
+        @foreach (var id in pulseTargets)
+        {
+            var sub = subs.First(s => s.Id == id);
+            <div @key="@($"pulse{pulse}{id}")" style="position:absolute;left:170px;top:116px;--dx:@(206)px;--dy:@(sub.Top - 100)px">
+                <span @attributes="Attrs.Merge(Letter)" aria-hidden="true">✉️</span>
+            </div>
+        }
+    </div>
+
+    <Flex Gap="SpaceScale.Sm" Wrap="true">
+        @foreach (var sub in subs)
+        {
+            var id = sub.Id;
+            var on = subscribed.Contains(id);
+            <Button @key="@("toggle" + id)" Variant="@(on ? ButtonVariant.Soft : ButtonVariant.Outline)" Tone="@(on ? Tone.Success : Tone.Neutral)"
+                    Icon="@(on ? Lucide.Minus : Lucide.Plus)" Disabled="@flying" @onclick="() => Toggle(id)">
+                @(on ? $"{id} 退订 -=" : $"{id} 订阅 +=")
+            </Button>
+        }
+        <Button Icon="Lucide.Zap" Disabled="@flying" @onclick="Fire">触发 SimulateReceive</Button>
+        <Button Variant="ButtonVariant.Ghost" Tone="Tone.Neutral" Disabled="@flying" @onclick="Reset">重来</Button>
+    </Flex>
+</div>
+<div @attributes="Attrs.Merge(ColumnLayer)">
+    <Narration @key="@note" Emoji="@emoji">@((MarkupString)note)</Narration>
+    <CodeBlock Code="@DefinitionCode" Lang="csharp" Title="发布方：事件怎么定义、怎么触发" Copyable="false" />
+    <CodeBlock Code="@ExecutedCode" Lang="csharp" Title="你刚才执行的代码" Copyable="false" />
+</div>
+</div>
+
+@code {
+    sealed record Subscriber(string Id, string Title, int Top, string Add, string Remove);
+
+    // 三个订阅者：A、C 是 Lambda（要退订必须先存进变量），B 是具名方法
+    static readonly Subscriber[] subs =
+    [
+        new("A", "订阅者 A（Lambda）", 8, "EventHandler<DataReceivedEventArgs> handlerA = (s, e) => Console.WriteLine($\"A 收到 {e.Text}\");\nport.DataReceived += handlerA;", "port.DataReceived -= handlerA;"),
+        new("B", "订阅者 B（具名方法）", 100, "port.DataReceived += OnDataReceived;   // 具名方法", "port.DataReceived -= OnDataReceived;"),
+        new("C", "订阅者 C（Lambda）", 192, "EventHandler<DataReceivedEventArgs> handlerC = (s, e) => Console.WriteLine($\"C 收到 {e.Text}\");\nport.DataReceived += handlerC;", "port.DataReceived -= handlerC;"),
+    ];
+
+    readonly HashSet<string> subscribed = [];
+    readonly Dictionary<string, string> last = [];
+    readonly List<string> log = [];
+    List<string> pulseTargets = [];
+    int count;
+    int pulse;
+    bool flying;
+    string emoji = "👆";
+    string note = "先点\"触发\"看看：现在<strong>没有任何订阅者</strong>，会发生什么？";
+
+    string DefinitionCode => string.Join("\n",
+        "public event EventHandler<DataReceivedEventArgs>? DataReceived;",
+        "",
+        "public void SimulateReceive(string text)",
+        "{",
+        "    // ?. ：没有订阅者时 DataReceived 是 null，直接跳过，不会出错",
+        "    DataReceived?.Invoke(this, new DataReceivedEventArgs(text));",
+        "}");
+
+    string ExecutedCode => log.Count == 0 ? "// 点上面的按钮，这里会出现对应的代码" : string.Join("\n", log.TakeLast(8));
+
+    void Toggle(string id)
+    {
+        var sub = subs.First(s => s.Id == id);
+        if (subscribed.Add(id))
+        {
+            log.Add(sub.Add);
+            last.Remove(id);
+            (emoji, note) = ("🔗", $"订阅者 {id} 挂上来了：箭头变成实线。事件内部其实是一个<strong>委托列表</strong>，<code>+=</code> 就是往列表里追加一项。");
+        }
+        else
+        {
+            subscribed.Remove(id);
+            log.Add(sub.Remove);
+            (emoji, note) = ("✂️", id == "B"
+                ? "B 退订了：具名方法可以直接写 <code>-= OnDataReceived</code>。"
+                : $"{id} 退订了。注意：Lambda 没有名字，要退订就得<strong>先存进变量</strong>（handler{id}），再 <code>-= handler{id}</code>；重新写一遍同样的 Lambda 是退不掉的。");
+        }
+    }
+
+    async Task Fire()
+    {
+        count++;
+        var message = $"OK {36.4 + count * 0.1:F1}";
+        var targets = subs.Where(s => subscribed.Contains(s.Id)).Select(s => s.Id).ToList();
+        log.Add($"port.SimulateReceive(\"{message}\");   // {(targets.Count == 0 ? "没有订阅者：什么也不会发生" : $"依次通知 {string.Join("、", targets)}")}");
+
+        if (targets.Count == 0)
+        {
+            (emoji, note) = ("🤷", "没有订阅者，<code>DataReceived</code> 是 <strong>null</strong>。<code>?.Invoke</code> 发现是 null 就直接跳过，所以<strong>不会报错</strong>——这就是触发事件要写 <code>?.Invoke</code> 的原因。");
+            return;
+        }
+
+        pulseTargets = targets;
+        pulse++;
+        flying = true;
+        (emoji, note) = ("✉️", $"信从发布者出发，沿着每根<strong>实线</strong>送到订阅者（按订阅的先后顺序依次调用）……");
+        StateHasChanged();
+        await Task.Delay(800);
+        foreach (var id in targets) last[id] = message;
+        pulseTargets = [];
+        flying = false;
+        (emoji, note) = ("📬", $"{string.Join("、", targets)} 都收到了「{message}」。没订阅的（虚线）一封也没收到：<strong>发布者不知道也不关心谁在听</strong>，这就是发布—订阅。");
+    }
+
+    void Reset()
+    {
+        subscribed.Clear();
+        last.Clear();
+        log.Clear();
+        pulseTargets = [];
+        count = 0;
+        (emoji, note) = ("👆", "先点\"触发\"看看：现在<strong>没有任何订阅者</strong>，会发生什么？");
+    }
+
+    static readonly Attrs GridLayer = new() { Sx = Grid };
+    static readonly Attrs ColumnLayer = new() { Sx = Column };
+
+    // 宽屏：左边舞台和按钮、右边解说和代码；窄屏上下排
+    static Style Grid => Css.Define(static () => new Style { Display = Display.Grid, GridTemplateColumns = "minmax(0, 1fr)", Gap = Space.Xl, [Breakpoints.Lg] = new() { GridTemplateColumns = "minmax(0, 580px) minmax(0, 1fr)" } });
+
+    static Style Column => Css.Define(static () => new Style { Display = Display.Flex, FlexDirection = FlexDirection.Column, Gap = Space.Md, MinWidth = 0 });
+
+    static readonly Attrs Letter = new() { Sx = LetterStyle };
+
+    static Style LetterStyle => Css.Define(static () => new Style
+    {
+        Display = Display.Block,
+        FontSize = CssLength.Rem(1.5),
+        Keyframes = Fly,
+        AnimationDuration = "0.8s",
+        AnimationTimingFunction = "ease-in-out",
+        AnimationFillMode = "forwards",
+    });
+
+    static Keyframes Fly => Css.Define(static () => new Keyframes
+    {
+        ["from"] = new() { Transform = "translate(0, 0)", Opacity = 1 },
+        ["to"] = new() { Transform = "translate(var(--dx), var(--dy))", Opacity = 1 },
+    });
+}

@@ -1,0 +1,121 @@
+@page "/events"
+@inherits RuneComponent
+
+@*
+    第 5 课：委托与事件（对应 01.CSharpSyntax 第 6 课）。
+      演示 1：把方法当变量——同一个 Apply，传不同的 Lambda 就做不同的事
+      演示 2：事件的发布—订阅——谁订阅了谁就收到，没订阅的收不到；退订、没有订阅者时会怎样
+    上位机里串口收到数据、按钮被点击，都是这个机制。
+*@
+
+<LessonPage Title="委托与事件：发布—订阅">
+    <Intro>
+        <strong>委托</strong>是"能装方法的变量"，<strong>事件</strong>是"一排委托 + 只能追加/移除的保护"。
+        可以把事件想成<strong>订报纸</strong>：报社（发布者）出了报纸，只送给订了的人（订阅者）；报社不知道也不关心谁订了，你随时可以退订。
+        串口收到数据、窗体里的按钮被点击，用的都是它。
+    </Intro>
+    <ChildContent>
+        <Demo Title="演示 1：把方法当变量（委托 / Lambda）">
+            <Stage>
+                <ToggleGroup @bind-Value="function" Required="true" aria-label="选一个 Lambda">
+                    @foreach (var (key, label, _) in functions)
+                    {
+                        <ToggleItem Value="@key">@label</ToggleItem>
+                    }
+                </ToggleGroup>
+                <Flex Direction="LayoutDirection.Column" Gap="SpaceScale.Sm">
+                    <Flex Gap="SpaceScale.Md" Wrap="true">
+                        @foreach (var n in numbers)
+                        {
+                            <Slot Name="输入" Data="@n.ToString()" />
+                        }
+                    </Flex>
+                    <div @attributes="Attrs.Merge(Funnel)"><span aria-hidden="true">⬇</span> 每个都交给 <span @attributes="Attrs.Merge(Chip)"><Code>@Current.Label</Code></span> 处理 <span aria-hidden="true">⬇</span></div>
+                    <Flex Gap="SpaceScale.Md" Wrap="true">
+                        @foreach (var n in numbers)
+                        {
+                            <Slot @key="@($"{function}{n}")" Name="输出" Data="@Current.Func(n).ToString()" Changed="true" />
+                        }
+                    </Flex>
+                </Flex>
+            </Stage>
+            <Side>
+                <CodeBlock Code="@FunctionCode" Lang="csharp" Copyable="false" />
+                <Narration @key="function" Emoji="🧩">
+                    <Code>Apply</Code> 只负责"挨个取出来、交给你传进来的方法处理"，<strong>怎么处理由调用方决定</strong>。
+                    换一个 Lambda，同一个 <Code>Apply</Code> 就做完全不同的事——这就是委托的意义，LINQ 的 <Code>Select</Code>、<Code>Where</Code> 也是这么工作的。
+                </Narration>
+            </Side>
+        </Demo>
+
+        <Card>
+            <Header><Strong>演示 2：发布—订阅</Strong></Header>
+            <ChildContent>
+                <Flex Direction="LayoutDirection.Column" Gap="SpaceScale.Lg">
+                    <Paragraph Tone="TextTone.Muted">
+                        试试：①什么都不订阅就触发　②订阅 A、B 后触发　③退订 A 再触发。注意信只会飞向<strong>实线</strong>连着的订阅者。
+                    </Paragraph>
+                    <EventStage />
+                    <Grid MinItemWidth="CssLength.Rem(22)" Gap="SpaceScale.Md">
+                        <Quiz Question="没有任何订阅者时，调用 DataReceived?.Invoke(...) 会怎样？" Options="@(new[] { "抛出异常", "什么也不发生" })" Answer="1"
+                              Explain="没有订阅者时事件是 null，?. 遇到 null 直接跳过。如果写成 DataReceived.Invoke(...) 就会抛 NullReferenceException，所以触发事件要写 ?.Invoke。" />
+                        <Quiz Question="port.DataReceived += (s, e) => ...; 之后，再写一遍同样的 Lambda 用 -= 能退订吗？" Options="@(new[] { "能", "不能" })" Answer="1"
+                              Explain="每次写出来的 Lambda 都是一个新的委托对象，-= 在列表里找不到它。要退订，先把委托存进变量，再用同一个变量 += 和 -=；或者用具名方法。" />
+                        <Quiz Question="事件（event）和直接写一个公开的委托字段，最大的区别是？" Options="@(new[] { "事件更快", "外部只能 += / -=，不能直接调用或覆盖", "事件可以有返回值" })" Answer="1"
+                              Explain="event 关键字加了保护：外部代码只能订阅/退订，不能直接触发它，也不能用 = 把别人的订阅全部冲掉；触发只能由发布者自己的类来做。" />
+                    </Grid>
+                </Flex>
+            </ChildContent>
+        </Card>
+
+        <Prose Measure="false">
+            <H2>上位机里要记住的三件事</H2>
+            <ul>
+                <li><strong>窗体里的每个控件事件</strong>（<Code>button.Click</Code>）、<strong>串口的 <Code>DataReceived</Code></strong>，都是这里的发布—订阅。</li>
+                <li><strong>用完要退订</strong>：发布者一直持有订阅者的引用，订阅者（比如已经关闭的窗体）不退订就无法被回收，是 WinForm 里常见的内存泄漏。</li>
+                <li><strong>串口的 <Code>DataReceived</Code> 在后台线程触发</strong>，订阅者里不能直接改界面控件，要切回 UI 线程（后面讲多线程时再演示）。</li>
+            </ul>
+            <H2>Action 和 Func</H2>
+            <table>
+                <thead><tr><th>类型</th><th>有返回值？</th><th>例子</th></tr></thead>
+                <tbody>
+                    <tr><td><Code>Action&lt;T&gt;</Code></td><td>没有</td><td><Code>Action&lt;string&gt; log = msg =&gt; Console.WriteLine(msg);</Code></td></tr>
+                    <tr><td><Code>Func&lt;T, TResult&gt;</Code></td><td>有（最后一个类型是返回值）</td><td><Code>Func&lt;int, int&gt; square = x =&gt; x * x;</Code></td></tr>
+                    <tr><td><Code>EventHandler&lt;TEventArgs&gt;</Code></td><td>没有</td><td>.NET 事件的标准签名 <Code>(object? sender, TEventArgs e)</Code></td></tr>
+                </tbody>
+            </table>
+        </Prose>
+    </ChildContent>
+</LessonPage>
+
+@code {
+    // ---- 演示 1 ----
+    static readonly int[] numbers = [1, 2, 3, 4];
+
+    static readonly (string Key, string Label, Func<int, int> Func)[] functions =
+    [
+        ("times10", "x => x * 10", x => x * 10),
+        ("plus1", "x => x + 1", x => x + 1),
+        ("square", "x => x * x", x => x * x),
+        ("negate", "x => -x", x => -x),
+    ];
+
+    string function = "times10";
+
+    (string Key, string Label, Func<int, int> Func) Current => functions.First(f => f.Key == function);
+
+    string FunctionCode => string.Join("\n",
+        "static IEnumerable<int> Apply(IEnumerable<int> source, Func<int, int> transform)",
+        "{",
+        "    foreach (var item in source) yield return transform(item);",
+        "}",
+        "",
+        $"var result = Apply([1, 2, 3, 4], {Current.Label});   // {string.Join(", ", numbers.Select(Current.Func))}");
+
+    static readonly Attrs Chip = new() { Sx = ChipStyle };
+    static readonly Attrs Funnel = new() { Sx = FunnelStyle };
+
+    static Style FunnelStyle => Css.Define(static () => new Style { Display = Display.Flex, AlignItems = AlignItems.Center, Gap = Space.Sm, Color = Colors.TextMuted });
+
+    static Style ChipStyle => Css.Define(static () => new Style { Padding = Space.Sm, BorderRadius = Radii.Md, BackgroundColor = Tones.Accent.Soft });
+}

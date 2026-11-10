@@ -1,0 +1,91 @@
+@*
+    通用的"单步执行"演示：左边是代码，当前执行的行高亮；右边是变量、控制台输出（逐步增加）和这一步的解说。
+    用在"执行顺序很重要"的地方：try/catch/finally、using 与释放顺序、yield 的惰性、foreach 取值……
+    每一步由调用方事先写好（高亮哪几行、控制台里已经输出了什么、变量是什么、解说什么）。
+*@
+@namespace LearnSite.Components.Visuals
+@inherits RuneComponent
+
+<Demo Title="@Title">
+    <Stage>
+        <CodeBlock @key="Code" Code="@Code" Lang="csharp" HighlightLines="@Current.Lines" LineNumbers="true" Copyable="false" />
+    </Stage>
+    <Side>
+        @if (Current.Vars is { Length: > 0 })
+        {
+            <Grid MinItemWidth="CssLength.Rem(9)" Gap="SpaceScale.Sm">
+                @foreach (var (name, value) in Current.Vars)
+                {
+                    <Slot @key="@($"{step}{name}")" Name="@name" Data="@value" />
+                }
+            </Grid>
+        }
+        <div @attributes="Attrs.Merge(ConsoleLayer)">
+            <span @attributes="Attrs.Merge(ConsoleTitle)">🖥 控制台输出</span>
+            @if (Current.Console.Length == 0)
+            {
+                <span @attributes="Attrs.Merge(ConsoleTitle)">（还没有输出）</span>
+            }
+            @foreach (var line in Current.Console)
+            {
+                <span @key="@($"{step}{line}")">@line</span>
+            }
+        </div>
+        <Narration @key="@($"{Title}{step}")" Emoji="@Current.Emoji">
+            <strong>第 @(step + 1) / @Steps.Count 步：@Current.Title。</strong> @((MarkupString)Current.Text)
+        </Narration>
+        <Flex Gap="SpaceScale.Sm" Wrap="true">
+            <Button Variant="ButtonVariant.Soft" Tone="Tone.Neutral" Disabled="@(step == 0)" @onclick="() => step--">上一步</Button>
+            <Button Disabled="@(step == Steps.Count - 1)" @onclick="() => step++">下一步</Button>
+            <Button Variant="ButtonVariant.Ghost" Tone="Tone.Neutral" Disabled="@(step == 0)" @onclick="() => step = 0">重来</Button>
+        </Flex>
+        @Extra
+    </Side>
+</Demo>
+
+@code {
+    /// <summary>回放的一步。Lines 是要高亮的行（如 "3,5-6"），Console 是到这一步为止的全部输出。</summary>
+    public sealed record TraceStep(string Title, string Lines, string[] Console, string Emoji, string Text, (string Name, string Value)[]? Vars = null);
+
+    /// <summary>卡片标题。</summary>
+    [Parameter] public string Title { get; set; } = "";
+
+    /// <summary>演示的代码。</summary>
+    [Parameter] public string Code { get; set; } = "";
+
+    /// <summary>所有步骤。换了一组步骤（引用变了）会回到第一步。</summary>
+    [Parameter] public IReadOnlyList<TraceStep> Steps { get; set; } = [];
+
+    /// <summary>放在按钮下面的额外内容（如小测验）。</summary>
+    [Parameter] public RenderFragment? Extra { get; set; }
+
+    int step;
+    IReadOnlyList<TraceStep>? lastSteps;
+
+    TraceStep Current => Steps[Math.Min(step, Steps.Count - 1)];
+
+    protected override void OnParametersSet()
+    {
+        if (ReferenceEquals(lastSteps, Steps)) return;
+        lastSteps = Steps;
+        step = 0;
+    }
+
+    static readonly Attrs ConsoleLayer = new() { Sx = Console };
+    static readonly Attrs ConsoleTitle = new() { Sx = Muted };
+
+    static Style Console => Css.Define(static () => new Style
+    {
+        Display = Display.Flex,
+        FlexDirection = FlexDirection.Column,
+        Gap = Space.Xs,
+        Padding = Space.Md,
+        BorderRadius = Radii.Md,
+        BackgroundColor = Colors.SurfaceMuted,
+        FontFamily = Fonts.Mono,
+        FontSize = CssLength.Rem(0.9),
+        MinHeight = CssLength.Rem(6),
+    });
+
+    static Style Muted => Css.Define(static () => new Style { Color = Colors.TextMuted, FontSize = CssLength.Rem(0.75) });
+}

@@ -1,0 +1,236 @@
+@page "/exceptions"
+@using System.Diagnostics
+@inherits RuneComponent
+
+@*
+    语法精讲 8：异常、using 与资源释放、线程安全（lock）。对应 01.CSharpSyntax 第 10 课。
+    前两个演示是单步执行（高亮当前行、控制台输出逐步增加），第三个演示是真的开多个线程去抢同一个计数器。
+*@
+
+<LessonPage Title="异常、资源释放与线程安全">
+    <Intro>
+        串口、Socket、文件、数据库连接都是"用完必须归还"的资源，出了错也一样。<Code>try / catch / finally</Code> 管"出错了怎么办"，
+        <Code>using</Code> 管"不管怎样都要释放"，<Code>lock</Code> 管"多个线程同时改一个数据"。顺序很重要，所以前两个演示做成了单步执行。
+    </Intro>
+    <ChildContent>
+        <Card>
+            <Header><Strong>演示 1：try / catch / finally 的执行顺序</Strong></Header>
+            <ChildContent>
+                <Flex Direction="LayoutDirection.Column" Gap="SpaceScale.Lg">
+                    <ToggleGroup @bind-Value="tryScenario" Required="true" aria-label="选一种情况">
+                        <ToggleItem Value="normal">一切正常</ToggleItem>
+                        <ToggleItem Value="caught">抛出 TimeoutException（被 catch 接住）</ToggleItem>
+                        <ToggleItem Value="uncaught">抛出 InvalidOperationException（类型不匹配）</ToggleItem>
+                    </ToggleGroup>
+                    <TraceDemo Title="单步执行" Code="@TryCode" Steps="TrySteps">
+                        <Extra>
+                            <Quiz Question="try 里抛出了异常，但没有任何 catch 匹配它，finally 还会执行吗？" Options="@(new[] { "会", "不会" })" Answer="0"
+                                  Explain="finally 无论如何都会执行（除非进程直接被杀死）。这正是用它关闭串口、释放资源的原因——哪怕异常继续向上抛，资源也已经归还了。" />
+                        </Extra>
+                    </TraceDemo>
+                </Flex>
+            </ChildContent>
+        </Card>
+
+        <Card>
+            <Header><Strong>演示 2：using 与释放顺序</Strong></Header>
+            <ChildContent>
+                <Flex Direction="LayoutDirection.Column" Gap="SpaceScale.Lg">
+                    <ToggleGroup @bind-Value="usingScenario" Required="true" aria-label="有没有 using">
+                        <ToggleItem Value="using">用了 using（推荐）</ToggleItem>
+                        <ToggleItem Value="none">没写 using</ToggleItem>
+                    </ToggleGroup>
+                    <TraceDemo Title="单步执行" Code="@UsingCode" Steps="UsingSteps">
+                        <Extra>
+                            <Quiz Question="连续写了 using var a、b、c，方法结束时按什么顺序释放？" Options="@(new[] { "a → b → c（创建顺序）", "c → b → a（相反顺序）" })" Answer="1"
+                                  Explain="后创建的先释放（像叠盘子，最后放上去的先拿走）。因为后面的资源可能依赖前面的，反过来释放才安全。" />
+                        </Extra>
+                    </TraceDemo>
+                </Flex>
+            </ChildContent>
+        </Card>
+
+        <Demo Title="演示 3：lock —— 多个线程同时改一个数">
+            <Stage>
+                <Paragraph Tone="TextTone.Muted">
+                    让 100 个并行任务把计数器各加 1000 次（共 100,000 次）。不保护的话，"读—加—写"会互相覆盖，结果小于 100,000：
+                </Paragraph>
+                <Flex Gap="SpaceScale.Sm" Wrap="true">
+                    <Button Variant="ButtonVariant.Soft" Tone="Tone.Danger" Icon="Lucide.Play" @onclick="@(() => Count("unsafe"))">不保护 counter++</Button>
+                    <Button Icon="Lucide.Play" @onclick="@(() => Count("lock"))">lock (gate) &#123; counter++; &#125;</Button>
+                    <Button Variant="ButtonVariant.Soft" Icon="Lucide.Play" @onclick="@(() => Count("interlocked"))">Interlocked.Increment</Button>
+                    <Button Variant="ButtonVariant.Ghost" Tone="Tone.Neutral" @onclick="@(() => runs.Clear())">清除</Button>
+                </Flex>
+                <Flex Direction="LayoutDirection.Column" Gap="SpaceScale.Sm">
+                    @foreach (var run in runs.AsEnumerable().Reverse().Take(6))
+                    {
+                        <Slot @key="@run.Id" Name="@($"{run.Name}　用时 {run.Milliseconds} ms")" Data="@($"结果 {run.Result:N0} / 应为 100,000　{(run.Result == 100_000 ? "✅" : "❌ 丢了 " + (100_000 - run.Result).ToString("N0") + " 次")}")" Changed="@(run.Result != 100_000)" />
+                    }
+                    @if (runs.Count == 0)
+                    {
+                        <Small Tone="TextTone.Muted">点上面的按钮运行。不保护的那个每次结果都不一样。</Small>
+                    }
+                </Flex>
+            </Stage>
+            <Side>
+                <CodeBlock Code="@LockCode" Lang="csharp" Copyable="false" />
+                <Narration Emoji="🔐">
+                    <Code>counter++</Code> 看起来是一步，其实是<strong>读出来、加一、写回去</strong>三步。两个线程同时读到 5，各加一都写回 6，就少加了一次。
+                    <Code>lock</Code> 让同一时刻只有一个线程能进入；只是简单计数，<Code>Interlocked</Code> 的原子操作更轻量。
+                    更多线程安全的东西：<Code>ConcurrentDictionary</Code>、<Code>ConcurrentQueue</Code>、<Code>Channel</Code>。
+                </Narration>
+                <Quiz Question="lock 里可以随便写很久的代码吗？" Options="@(new[] { "可以，反正只有一个线程在执行", "不应该：锁住期间别的线程都得排队等，要尽量短" })" Answer="1"
+                      Explain="锁的范围越大，别的线程等得越久，并发的好处就没了。只把“必须独占”的几行放进 lock，更不要在 lock 里做慢操作（IO、等待网络）。" />
+            </Side>
+        </Demo>
+    </ChildContent>
+</LessonPage>
+
+@code {
+    // ---- 演示 1：try/catch/finally ----
+    string tryScenario = "normal";
+
+    const string TryCode = """
+        try
+        {
+            Console.WriteLine("1 打开串口");
+            ReadFromPlc();            // 可能抛异常
+            Console.WriteLine("2 读取完成");
+        }
+        catch (TimeoutException ex)
+        {
+            Console.WriteLine($"3 超时：{ex.Message}");
+        }
+        finally
+        {
+            Console.WriteLine("4 关闭串口");
+        }
+        Console.WriteLine("5 继续往下");
+        """;
+
+    static readonly IReadOnlyList<TraceDemo.TraceStep> normalSteps =
+    [
+        new("开始", "", [], "🏁", "先看最顺利的情况：<code>ReadFromPlc()</code> 不会出错。"),
+        new("进入 try", "3", ["1 打开串口"], "▶️", "从 try 的第一行开始执行。"),
+        new("调用 ReadFromPlc", "4", ["1 打开串口"], "📞", "这次读取<strong>没有出错</strong>，正常返回。"),
+        new("try 的最后一行", "5", ["1 打开串口", "2 读取完成"], "✅", "try 块顺利执行完。"),
+        new("跳过 catch", "7-10", ["1 打开串口", "2 读取完成"], "⏭️", "没有异常，<strong>整个 catch 块被跳过</strong>。"),
+        new("执行 finally", "13", ["1 打开串口", "2 读取完成", "4 关闭串口"], "🧹", "<code>finally</code> <strong>不管有没有异常都会执行</strong>，用来关闭串口、释放资源。"),
+        new("继续往下", "15", ["1 打开串口", "2 读取完成", "4 关闭串口", "5 继续往下"], "🏁", "一切正常，程序继续。"),
+    ];
+
+    static readonly IReadOnlyList<TraceDemo.TraceStep> caughtSteps =
+    [
+        new("开始", "", [], "🏁", "这次 <code>ReadFromPlc()</code> 会抛出 <code>TimeoutException</code>。"),
+        new("进入 try", "3", ["1 打开串口"], "▶️", "从 try 的第一行开始执行。"),
+        new("抛出异常", "4", ["1 打开串口"], "💥", "<code>ReadFromPlc()</code> 抛出 <code>TimeoutException</code>：程序<strong>立刻离开 try</strong>，第 5 行“读取完成”<strong>不会执行</strong>。"),
+        new("匹配 catch", "7", ["1 打开串口"], "🎯", "异常类型是 <code>TimeoutException</code>，和 <code>catch (TimeoutException ex)</code> 匹配，进入这个 catch。"),
+        new("执行 catch", "9", ["1 打开串口", "3 超时：读取设备超时"], "🩹", "在 catch 里处理错误：这里只是打印。异常到此为止，<strong>不会再向外传播</strong>。", [("ex.Message", "读取设备超时")]),
+        new("执行 finally", "13", ["1 打开串口", "3 超时：读取设备超时", "4 关闭串口"], "🧹", "然后执行 finally，串口被关闭。"),
+        new("继续往下", "15", ["1 打开串口", "3 超时：读取设备超时", "4 关闭串口", "5 继续往下"], "🏁", "异常已经被处理，程序<strong>继续</strong>往下执行。"),
+    ];
+
+    static readonly IReadOnlyList<TraceDemo.TraceStep> uncaughtSteps =
+    [
+        new("开始", "", [], "🏁", "这次 <code>ReadFromPlc()</code> 会抛出 <code>InvalidOperationException</code>，而 catch 只接 <code>TimeoutException</code>。"),
+        new("进入 try", "3", ["1 打开串口"], "▶️", "从 try 的第一行开始执行。"),
+        new("抛出异常", "4", ["1 打开串口"], "💥", "抛出 <code>InvalidOperationException</code>，立刻离开 try。"),
+        new("检查 catch", "7", ["1 打开串口"], "🙅", "catch 只接 <code>TimeoutException</code>，类型<strong>不匹配</strong>，跳过。"),
+        new("执行 finally", "13", ["1 打开串口", "4 关闭串口"], "🧹", "<strong>即使异常没被处理，finally 照样执行</strong>——串口还是被关闭了。"),
+        new("异常继续向外传播", "", ["1 打开串口", "4 关闭串口"], "🚨", "异常没人处理，沿着调用栈<strong>继续向上抛</strong>：上一层有 catch 就由它处理，否则程序崩溃。第 15 行<strong>不会执行</strong>。"),
+    ];
+
+    IReadOnlyList<TraceDemo.TraceStep> TrySteps => tryScenario switch { "caught" => caughtSteps, "uncaught" => uncaughtSteps, _ => normalSteps };
+
+    // ---- 演示 2：using ----
+    string usingScenario = "using";
+
+    string UsingCode => usingScenario == "using"
+        ? "using var a = new Resource(\"A\");\nusing var b = new Resource(\"B\");\nusing var c = new Resource(\"C\");\nConsole.WriteLine(\"使用资源……\");\nthrow new InvalidOperationException(\"模拟故障\");"
+        : "var a = new Resource(\"A\");\nvar b = new Resource(\"B\");\nvar c = new Resource(\"C\");\nConsole.WriteLine(\"使用资源……\");\nthrow new InvalidOperationException(\"模拟故障\");";
+
+    static readonly IReadOnlyList<TraceDemo.TraceStep> usingSteps =
+    [
+        new("开始", "", [], "🏁", "<code>Resource</code> 实现了 <code>IDisposable</code>，构造时“打开”，<code>Dispose()</code> 时“释放”（代表串口、文件、连接）。"),
+        new("打开 A", "1", ["[A] 打开"], "🔓", "<code>using var</code>：声明资源的同时，约定“离开当前作用域时自动 Dispose”。"),
+        new("打开 B", "2", ["[A] 打开", "[B] 打开"], "🔓", "再打开 B。"),
+        new("打开 C", "3", ["[A] 打开", "[B] 打开", "[C] 打开"], "🔓", "再打开 C。"),
+        new("使用资源", "4", ["[A] 打开", "[B] 打开", "[C] 打开", "使用资源……"], "🛠️", "正常使用三个资源。"),
+        new("抛出异常", "5", ["[A] 打开", "[B] 打开", "[C] 打开", "使用资源……"], "💥", "出错了！程序要<strong>离开当前作用域</strong>，using 约定的自动释放开始工作。"),
+        new("释放 C", "", ["[A] 打开", "[B] 打开", "[C] 打开", "使用资源……", "[C] 释放"], "🧹", "按<strong>相反的顺序</strong>：后打开的先释放。"),
+        new("释放 B", "", ["[A] 打开", "[B] 打开", "[C] 打开", "使用资源……", "[C] 释放", "[B] 释放"], "🧹", "然后是 B。"),
+        new("释放 A", "", ["[A] 打开", "[B] 打开", "[C] 打开", "使用资源……", "[C] 释放", "[B] 释放", "[A] 释放"], "✅", "最后是 A。异常继续向外传播，但<strong>三个资源都已经安全归还</strong>。"),
+    ];
+
+    static readonly IReadOnlyList<TraceDemo.TraceStep> noUsingSteps =
+    [
+        new("开始", "", [], "🏁", "这次没有写 <code>using</code>，也没有手动调用 <code>Dispose()</code>。"),
+        new("打开 A", "1", ["[A] 打开"], "🔓", "打开 A。"),
+        new("打开 B", "2", ["[A] 打开", "[B] 打开"], "🔓", "打开 B。"),
+        new("打开 C", "3", ["[A] 打开", "[B] 打开", "[C] 打开"], "🔓", "打开 C。"),
+        new("使用资源", "4", ["[A] 打开", "[B] 打开", "[C] 打开", "使用资源……"], "🛠️", "正常使用。"),
+        new("抛出异常", "5", ["[A] 打开", "[B] 打开", "[C] 打开", "使用资源……"], "💥", "出错了，程序离开当前作用域。"),
+        new("资源泄漏", "", ["[A] 打开", "[B] 打开", "[C] 打开", "使用资源……", "（没有任何“释放”）"], "🚨", "没有人调用 <code>Dispose()</code>：<strong>三个资源都没有释放</strong>。串口会一直被占用，下次打开就报“端口已被占用”；文件会一直被锁定。这就是要用 <code>using</code> 的原因。"),
+    ];
+
+    IReadOnlyList<TraceDemo.TraceStep> UsingSteps => usingScenario == "using" ? usingSteps : noUsingSteps;
+
+    // ---- 演示 3：lock ----
+    sealed record CounterRun(int Id, string Name, int Result, long Milliseconds);
+
+    readonly List<CounterRun> runs = [];
+    int runId;
+    readonly Lock gate = new();
+
+    void Count(string how)
+    {
+        var counter = 0;
+        var watch = Stopwatch.StartNew();
+        switch (how)
+        {
+            case "lock":
+                Parallel.For(0, 100, _ =>
+                {
+                    for (var i = 0; i < 1000; i++)
+                    {
+                        lock (gate) { counter++; }
+                    }
+                });
+                break;
+            case "interlocked":
+                Parallel.For(0, 100, _ =>
+                {
+                    for (var i = 0; i < 1000; i++) Interlocked.Increment(ref counter);
+                });
+                break;
+            default:
+                Parallel.For(0, 100, _ =>
+                {
+                    for (var i = 0; i < 1000; i++) counter++;
+                });
+                break;
+        }
+
+        watch.Stop();
+        runs.Add(new(++runId, how switch { "lock" => "lock", "interlocked" => "Interlocked", _ => "不保护" }, counter, watch.ElapsedMilliseconds));
+    }
+
+    const string LockCode = """
+        var gate = new Lock();   // .NET 9 起的专用锁类型
+        var counter = 0;
+
+        Parallel.For(0, 100, _ =>
+        {
+            for (var i = 0; i < 1000; i++)
+            {
+                lock (gate)      // 同一时刻只有一个线程能进来
+                {
+                    counter++;
+                }
+            }
+        });
+        // counter 一定是 100000
+
+        // 只是简单计数：Interlocked.Increment(ref counter) 更轻量
+        """;
+}

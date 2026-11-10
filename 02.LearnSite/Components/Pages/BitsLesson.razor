@@ -9,94 +9,79 @@
     页面上显示的数字、代码都是 C# 当场算出来的。代码块有语法高亮（Rune 自带，离线可用）。
 *@
 
-<Container Size="ContainerSize.Lg" Padding="SpaceScale.None">
-    <Flex Direction="LayoutDirection.Column" Gap="SpaceScale.Xl">
-
-        <Prose Measure="false">
-            <H1>位与字节</H1>
-            <Paragraph>
-                计算机里一切都是 0 和 1。一个 <Code>byte</Code> 有 8 个位，像 8 个<strong>开关</strong>：每个开关有自己的"分值"
-                （最右边 1 分，往左依次 2、4、8……128 分），<strong>开着的开关分值加起来，就是这个字节的值</strong>。
-            </Paragraph>
-        </Prose>
-
-        @* ---------- 演示 1：一个字节 ---------- *@
-        <Card>
-            <Header><Strong>演示 1：拨动 8 个开关</Strong></Header>
-            <ChildContent>
-                <Flex Direction="LayoutDirection.Column" Gap="SpaceScale.Lg">
-                    <BitRow Label="byte" @bind-Value="single" />
-                    <BitSum Value="single" />
-                    <Flex Gap="SpaceScale.Sm" Wrap="true">
-                        <Button Variant="ButtonVariant.Soft" Tone="Tone.Neutral" @onclick="@(() => single = 0)">清零</Button>
-                        <Button Variant="ButtonVariant.Soft" Tone="Tone.Neutral" @onclick="@(() => single = 255)">全部置 1</Button>
-                        <Button Variant="ButtonVariant.Soft" Tone="Tone.Neutral" @onclick="@(() => single = 0b1000_0000)">只有最高位</Button>
-                        <Button Variant="ButtonVariant.Soft" Tone="Tone.Neutral" @onclick="@(() => single = 0b0000_1010)">0b0000_1010</Button>
-                    </Flex>
-                    <Grid MinItemWidth="CssLength.Rem(11)" Gap="SpaceScale.Sm">
-                        <Readout Title="byte（无符号 0~255）" Value="@single.ToString()" />
-                        <Readout Title="sbyte（有符号 -128~127）" Value="@unchecked((sbyte)single).ToString()" />
-                        <Readout Title="十六进制" Value="@($"0x{single:X2}")" />
-                        <Readout Title="二进制" Value="@Binary(single)" />
-                    </Grid>
-                    <Narration @key="single" Emoji="@SingleNote.Emoji">@SingleNote.Text</Narration>
-                    <Quiz Question="0b0000_0110 是多少？"
-                          Options="@(new[] { "4", "6", "8", "12" })" Answer="1"
-                          Explain="第 1 位（权重 2）和第 2 位（权重 4）是 1，2 + 4 = 6。" />
+<LessonPage Title="位与字节">
+    <Intro>
+        计算机里一切都是 0 和 1。一个 <Code>byte</Code> 有 8 个位，像 8 个<strong>开关</strong>：每个开关有自己的"分值"
+        （最右边 1 分，往左依次 2、4、8……128 分），<strong>开着的开关分值加起来，就是这个字节的值</strong>。
+    </Intro>
+    <ChildContent>
+        <Demo Title="演示 1：拨动 8 个开关">
+            <Stage>
+                <BitRow Label="byte" @bind-Value="single" />
+                <BitSum Value="single" />
+                <Flex Gap="SpaceScale.Sm" Wrap="true">
+                    <Button Variant="ButtonVariant.Soft" Tone="Tone.Neutral" @onclick="@(() => single = 0)">清零</Button>
+                    <Button Variant="ButtonVariant.Soft" Tone="Tone.Neutral" @onclick="@(() => single = 255)">全部置 1</Button>
+                    <Button Variant="ButtonVariant.Soft" Tone="Tone.Neutral" @onclick="@(() => single = 0b1000_0000)">只有最高位</Button>
+                    <Button Variant="ButtonVariant.Soft" Tone="Tone.Neutral" @onclick="@(() => single = 0b0000_1010)">0b0000_1010</Button>
                 </Flex>
-            </ChildContent>
-        </Card>
+                <Grid MinItemWidth="CssLength.Rem(11)" Gap="SpaceScale.Sm">
+                    <Readout Title="byte（无符号 0~255）" Value="@single.ToString()" />
+                    <Readout Title="sbyte（有符号 -128~127）" Value="@unchecked((sbyte)single).ToString()" />
+                    <Readout Title="十六进制" Value="@($"0x{single:X2}")" />
+                    <Readout Title="二进制" Value="@Binary(single)" />
+                </Grid>
+            </Stage>
+            <Side>
+                <CodeBlock Code="@SingleCode" Lang="csharp" Copyable="false" />
+                <Narration @key="single" Emoji="@SingleNote.Emoji">@SingleNote.Text</Narration>
+                <Quiz Question="0b0000_0110 是多少？" Options="@(new[] { "4", "6", "8", "12" })" Answer="1"
+                      Explain="第 1 位（权重 2）和第 2 位（权重 4）是 1，2 + 4 = 6。" />
+            </Side>
+        </Demo>
 
-        @* ---------- 演示 2：位运算 ---------- *@
-        <Card>
-            <Header><Strong>演示 2：位运算的"竖式"</Strong></Header>
-            <ChildContent>
-                <Flex Direction="LayoutDirection.Column" Gap="SpaceScale.Lg">
-                    <ToggleGroup @bind-Value="op" Required="true" aria-label="运算">
-                        <ToggleItem Value="or">| 或</ToggleItem>
-                        <ToggleItem Value="and">&amp; 与</ToggleItem>
-                        <ToggleItem Value="xor">^ 异或</ToggleItem>
-                        <ToggleItem Value="not">~ 取反</ToggleItem>
-                        <ToggleItem Value="shl">&lt;&lt; 左移</ToggleItem>
-                        <ToggleItem Value="shr">&gt;&gt; 右移</ToggleItem>
-                    </ToggleGroup>
+        <Demo Title="演示 2：位运算的&quot;竖式&quot;">
+            <Stage>
+                <ToggleGroup @bind-Value="op" Required="true" aria-label="运算">
+                    <ToggleItem Value="or">| 或</ToggleItem>
+                    <ToggleItem Value="and">&amp; 与</ToggleItem>
+                    <ToggleItem Value="xor">^ 异或</ToggleItem>
+                    <ToggleItem Value="not">~ 取反</ToggleItem>
+                    <ToggleItem Value="shl">&lt;&lt; 左移</ToggleItem>
+                    <ToggleItem Value="shr">&gt;&gt; 右移</ToggleItem>
+                </ToggleGroup>
+                @if (op is "shl" or "shr")
+                {
+                    <Field Label="@($"移动 {shift} 位")">
+                        <Slider TValue="int" @bind-Value="shift" Min="1" Max="7" />
+                    </Field>
+                }
+                <BitMath @bind-A="a" @bind-B="b" Op="@op" Shift="@shift" />
+            </Stage>
+            <Side>
+                <CodeBlock Code="@CodeLine" Lang="csharp" Copyable="false" />
+                <Narration @key="op" Emoji="@Rule.Emoji">@Rule.Text</Narration>
+                <Quiz Question="0b1100 &amp; 0b1010 等于多少？" Options="@(new[] { "0b1000", "0b1010", "0b1100", "0b1110" })" Answer="0"
+                      Explain="& 要两个位都是 1 才得 1：1100 和 1010 只有最高位同时是 1，所以结果是 1000。" />
+            </Side>
+        </Demo>
 
-                    @if (op is "shl" or "shr")
-                    {
-                        <Field Label="@($"移动 {shift} 位")">
-                            <Slider TValue="int" @bind-Value="shift" Min="1" Max="7" />
-                        </Field>
-                    }
-
-                    <BitMath @bind-A="a" @bind-B="b" Op="@op" Shift="@shift" />
-
-                    <CodeBlock Code="@CodeLine" Lang="csharp" Copyable="false" />
-                    <Narration @key="op" Emoji="@Rule.Emoji">@Rule.Text</Narration>
-                    <Quiz Question="0b1100 & 0b1010 等于多少？"
-                          Options="@(new[] { "0b1000", "0b1010", "0b1100", "0b1110" })" Answer="0"
-                          Explain="& 要两个位都是 1 才得 1：1100 和 1010 只有最高位同时是 1，所以结果是 1000。" />
-                </Flex>
-            </ChildContent>
-        </Card>
-
-        @* ---------- 演示 3：Flags ---------- *@
-        <Card>
-            <Header><Strong>演示 3：设备面板上的 4 盏报警灯</Strong></Header>
-            <ChildContent>
-                <Flex Direction="LayoutDirection.Column" Gap="SpaceScale.Lg">
-                    <AlarmLamps @bind-Values="alarms" />
-                    <BitRow Label="状态字节" Value="AlarmByte" ReadOnly="true" Captions="alarmCaptions" />
-                    <CodeBlock Code="@AlarmCode" Lang="csharp" Copyable="false" />
-                    <Narration Emoji="📟">
-                        点一盏灯，状态字节里对应的那一位就翻转：灯亮 = 这一位是 1。设备把 4 个报警塞进<strong>一个字节</strong>发给你，
-                        你收到后逐位检查，就知道哪几个报警正在发生。打开一个报警用 <Code>|=</Code>，关闭用 <Code>&amp;= ~</Code>。
-                    </Narration>
-                    <Quiz Question="想让 Offline（第 2 位）一定变成 0，不管它原来是 0 还是 1，用哪个？"
-                          Options="@(new[] { "alarm |= Alarm.Offline", "alarm &= ~Alarm.Offline", "alarm ^= Alarm.Offline" })" Answer="1"
-                          Explain="~Offline 是“只有第 2 位是 0、其余全是 1”，和 alarm 做 & 就把第 2 位清 0、其他位不变。| 是置 1，^ 是翻转（原来是 0 反而会变成 1）。" />
-                </Flex>
-            </ChildContent>
-        </Card>
+        <Demo Title="演示 3：设备面板上的 4 盏报警灯（Flags）">
+            <Stage>
+                <AlarmLamps @bind-Values="alarms" />
+                <BitRow Label="状态字节" Value="AlarmByte" ReadOnly="true" Captions="alarmCaptions" />
+            </Stage>
+            <Side>
+                <CodeBlock Code="@AlarmCode" Lang="csharp" Copyable="false" />
+                <Narration Emoji="📟">
+                    点一盏灯，状态字节里对应的那一位就翻转：灯亮 = 这一位是 1。设备把 4 个报警塞进<strong>一个字节</strong>发给你，
+                    你收到后逐位检查，就知道哪几个报警正在发生。打开一个报警用 <Code>|=</Code>，关闭用 <Code>&amp;= ~</Code>。
+                </Narration>
+                <Quiz Question="想让 Offline（第 2 位）一定变成 0，不管它原来是 0 还是 1，用哪个？"
+                      Options="@(new[] { "alarm |= Alarm.Offline", "alarm &= ~Alarm.Offline", "alarm ^= Alarm.Offline" })" Answer="1"
+                      Explain="~Offline 是“只有第 2 位是 0、其余全是 1”，和 alarm 做 & 就把第 2 位清 0、其他位不变。| 是置 1，^ 是翻转（原来是 0 反而会变成 1）。" />
+            </Side>
+        </Demo>
 
         <Prose Measure="false">
             <H2>要记住的四句话</H2>
@@ -107,12 +92,17 @@
                 <li>位运算的结果在 C# 里是 <Code>int</Code>，赋回 <Code>byte</Code> 要强转，强转会静默截断高位。</li>
             </ul>
         </Prose>
-    </Flex>
-</Container>
+    </ChildContent>
+</LessonPage>
 
 @code {
     // ---- 演示 1 ----
     byte single = 0b0000_1010;
+
+    string SingleCode =>
+        $"byte value = {Literal(single)};   // = {single}\n" +
+        $"sbyte signed = unchecked((sbyte)value);   // = {unchecked((sbyte)single)}\n" +
+        $"string hex = value.ToString(\"X2\");   // = {single:X2}";
 
     (string Emoji, string Text) SingleNote => single switch
     {

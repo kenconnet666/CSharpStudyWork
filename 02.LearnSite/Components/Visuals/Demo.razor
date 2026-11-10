@@ -1,0 +1,41 @@
+@*
+    一个演示卡片，宽屏上分成两栏：左边 Stage（可以点、可以拖的演示），右边 Side（代码、解说、测验）；
+    窄窗口自动变成上下两段。这样宽屏不再留一大片空白，代码也永远在演示旁边，操作时一眼能对照。
+*@
+@namespace LearnSite.Components.Visuals
+@inherits RuneComponent
+
+<Card>
+    <Header><Strong>@Title</Strong></Header>
+    <ChildContent>
+        <div @attributes="Attrs.Merge(GridLayer)">
+            <div @attributes="Attrs.Merge(ColumnLayer)">@Stage</div>
+            <div @attributes="Attrs.Merge(ColumnLayer)">@Side</div>
+        </div>
+    </ChildContent>
+</Card>
+
+@code {
+    /// <summary>演示标题。</summary>
+    [Parameter] public string Title { get; set; } = "";
+
+    /// <summary>左栏：演示。</summary>
+    [Parameter] public RenderFragment? Stage { get; set; }
+
+    /// <summary>右栏：代码、解说、测验。</summary>
+    [Parameter] public RenderFragment? Side { get; set; }
+
+    static readonly Attrs GridLayer = new() { Sx = Grid };
+    static readonly Attrs ColumnLayer = new() { Sx = Column };
+
+    // 窄屏一栏；够宽（Lg 以上）时左栏略宽于右栏
+    static Style Grid => Css.Define(static () => new Style
+    {
+        Display = Display.Grid,
+        GridTemplateColumns = "minmax(0, 1fr)",
+        Gap = Space.Xl,
+        [Breakpoints.Lg] = new() { GridTemplateColumns = "minmax(0, 1.1fr) minmax(0, 1fr)" },
+    });
+
+    static Style Column => Css.Define(static () => new Style { Display = Display.Flex, FlexDirection = FlexDirection.Column, Gap = Space.Lg, MinWidth = 0 });
+}

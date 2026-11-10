@@ -1,0 +1,335 @@
+@page "/async"
+@using System.Diagnostics
+@implements IDisposable
+@inherits RuneComponent
+
+@*
+    语法精讲 7：async / await。对应 01.CSharpSyntax 第 9 课。
+      演示 1：真正在跑的时间线——三个“读设备”任务，用不同的写法组合，横条的长短就是真实耗时
+      演示 2：为什么 UI 线程里不能阻塞——界面线程在三种写法里分别在干什么
+*@
+
+<LessonPage Title="async / await：不卡界面的等待">
+    <Intro>
+        读串口、读 PLC、发网络请求都要<strong>等</strong>。<Code>await</Code> 的意思是"在这里等结果，但<strong>别占着线程干等</strong>"——
+        线程可以去做别的事（比如响应界面），结果好了再回来继续往下执行。写法和 JS 的 async/await 几乎一样，<Code>Task</Code> 就是 <Code>Promise</Code>。
+    </Intro>
+    <ChildContent>
+        @* ---------- 演示 1：时间线 ---------- *@
+        <Demo Title="演示 1：三个读设备任务的真实时间线">
+            <Stage>
+                <ToggleGroup @bind-Value="mode" Required="true" Disabled="@running" aria-label="组合方式">
+                    <ToggleItem Value="sequential">依次 await</ToggleItem>
+                    <ToggleItem Value="whenall">Task.WhenAll</ToggleItem>
+                    <ToggleItem Value="whenany">Task.WhenAny</ToggleItem>
+                    <ToggleItem Value="timeout">WaitAsync 超时</ToggleItem>
+                    <ToggleItem Value="cancel">CancellationToken 取消</ToggleItem>
+                </ToggleGroup>
+                <Flex Gap="SpaceScale.Sm" Align="ItemAlign.Center" Wrap="true">
+                    <Button Icon="@(running ? Lucide.Loader : Lucide.Play)" Disabled="@running" @onclick="Run">运行</Button>
+                    <Readout Title="已用时间" Value="@($"{(int)Elapsed} ms")" />
+                </Flex>
+                <div @attributes="Attrs.Merge(ChartLayer)">
+                    @foreach (var job in jobs)
+                    {
+                        <div @attributes="Attrs.Merge(RowLayer)">
+                            <span @attributes="Attrs.Merge(NameLayer)">@job.Name<br /><small>@job.Duration ms · @job.Status</small></span>
+                            <div @attributes="Attrs.Merge(TrackLayer)">
+                                @if (job.Start is not null)
+                                {
+                                    <div @attributes="Attrs.Merge(BarFor(job.Status))" style="left:@(Percent(job.Start.Value))%;width:@(Percent(BarWidth(job)))%"></div>
+                                }
+                                @if (MarkerAt is { } marker)
+                                {
+                                    <div @attributes="Attrs.Merge(MarkerLayer)" style="left:@(Percent(marker))%"></div>
+                                }
+                            </div>
+                        </div>
+                    }
+                    <div @attributes="Attrs.Merge(AxisLayer)">
+                        <span @attributes="Attrs.Merge(NameLayer)"></span>
+                        <div @attributes="Attrs.Merge(TrackLayer)">
+                            @foreach (var tick in new[] { 0, 500, 1000, 1500 })
+                            {
+                                <span @attributes="Attrs.Merge(TickLayer)" style="left:@(Percent(tick))%">@tick</span>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </Stage>
+            <Side>
+                <CodeBlock @key="@("modecode" + mode)" Code="@ModeCode" Lang="csharp" Copyable="false" />
+                <Narration @key="@note" Emoji="@(string.IsNullOrEmpty(note) ? "▶️" : "⏱️")">@((MarkupString)(string.IsNullOrEmpty(note) ? "选一种写法，点“运行”：横条是<strong>真实</strong>的执行过程，不是动画。" : note))</Narration>
+                <Quiz Question="三个任务各 500、300、700 毫秒，用 Task.WhenAll 同时开始，总共大约多久？" Options="@(new[] { "1500 ms", "700 ms", "300 ms" })" Answer="1"
+                      Explain="同时开始，要等最慢的那个结束，所以总耗时 ≈ 最慢的 700 ms。依次 await 才是 500 + 300 + 700 = 1500 ms。" />
+            </Side>
+        </Demo>
+
+        @* ---------- 演示 2：UI 线程 ---------- *@
+        <Demo Title="演示 2：界面线程在干什么？">
+            <Stage>
+                <ToggleGroup @bind-Value="uiMode" Required="true" aria-label="按钮点击处理里的写法">
+                    <ToggleItem Value="block">task.Result（阻塞）</ToggleItem>
+                    <ToggleItem Value="await">await task</ToggleItem>
+                    <ToggleItem Value="run">await Task.Run(...)</ToggleItem>
+                </ToggleGroup>
+                <div @attributes="Attrs.Merge(ChartLayer)">
+                    @foreach (var (label, segments) in UiRows)
+                    {
+                        <div @attributes="Attrs.Merge(RowLayer)">
+                            <span @attributes="Attrs.Merge(NameLayer)">@label</span>
+                            <div @attributes="Attrs.Merge(TrackLayer)">
+                                @foreach (var segment in segments)
+                                {
+                                    <div @key="@($"{uiMode}{label}{segment.From}")" @attributes="Attrs.Merge(SegmentLayer(segment.Kind))" style="left:@(segment.From / 10.5)%;width:@((segment.To - segment.From) / 10.5)%">@segment.Text</div>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            </Stage>
+            <Side>
+                <CodeBlock @key="@("code" + uiMode)" Code="@UiCode" Lang="csharp" Copyable="false" />
+                <Narration @key="@("note" + uiMode)" Emoji="@UiNote.Emoji">@((MarkupString)UiNote.Text)</Narration>
+                <Quiz Question="async void 应该用在哪里？" Options="@(new[] { "任何异步方法", "只用在事件处理器（如 Click）", "永远不要用" })" Answer="1"
+                      Explain="async void 的异常无法被调用方捕获，也没法 await，所以只用于事件处理器这种“没有返回值的入口”；其他地方一律返回 Task。" />
+            </Side>
+        </Demo>
+
+        <Prose Measure="false">
+            <H2>上位机里要记住的</H2>
+            <ul>
+                <li><strong>UI 线程里不要写 <Code>.Result</Code> / <Code>.Wait()</Code> / <Code>Thread.Sleep</Code></strong>：界面会卡死，甚至死锁。用 <Code>await</Code> 和 <Code>Task.Delay</Code>。</li>
+                <li><strong>耗 CPU 的同步代码</strong>（解析大文件、算 CRC）用 <Code>await Task.Run(...)</Code> 丢到线程池。</li>
+                <li><strong>要能停</strong>：把 <Code>CancellationToken</Code> 一路传进去，点"停止"时 <Code>cts.Cancel()</Code>；超时用 <Code>WaitAsync</Code>（注意它只是"不等了"，任务本身没停）。</li>
+                <li>串口、Socket 的回调在后台线程，更新控件要切回 UI 线程（WinForm 用 <Code>Invoke</Code>，或者 await 之后自动回来）。</li>
+            </ul>
+        </Prose>
+    </ChildContent>
+</LessonPage>
+
+@code {
+    // ---- 演示 1：时间线 ----
+    sealed class Job(string name, int duration)
+    {
+        public string Name { get; } = name;
+
+        public int Duration { get; } = duration;
+
+        public double? Start { get; set; }
+
+        public double? End { get; set; }
+
+        public string Status { get; set; } = "等待";
+
+        public void Reset()
+        {
+            Start = null;
+            End = null;
+            Status = "等待";
+        }
+    }
+
+    readonly Job[] jobs = [new("读温度", 500), new("读压力", 300), new("读转速", 700)];
+    readonly Stopwatch stopwatch = new();
+    string mode = "sequential";
+    bool running;
+    string note = "";
+    CancellationTokenSource? cts;
+
+    const double Scale = 1600;
+
+    double Elapsed => stopwatch.ElapsedMilliseconds;
+
+    static double Percent(double ms) => Math.Min(100, ms / Scale * 100);
+
+    double BarWidth(Job job) => (job.End ?? Elapsed) - job.Start!.Value;
+
+    double? MarkerAt => mode switch { "timeout" => 450, "cancel" => 350, _ => null };
+
+    async Task Run()
+    {
+        if (running) return;
+        foreach (var job in jobs) job.Reset();
+        note = "";
+        running = true;
+        cts = new CancellationTokenSource();
+        stopwatch.Restart();
+        var ticker = Tick();
+        try
+        {
+            await Execute(cts.Token);
+        }
+        finally
+        {
+            running = false;
+        }
+
+        await ticker;
+    }
+
+    // 运行期间每 40ms 刷新一次，横条就会“长”出来
+    async Task Tick()
+    {
+        while (running)
+        {
+            StateHasChanged();
+            await Task.Delay(40);
+        }
+
+        StateHasChanged();
+    }
+
+    async Task DoJob(Job job, CancellationToken token)
+    {
+        job.Start = stopwatch.ElapsedMilliseconds;
+        job.Status = "进行中";
+        try
+        {
+            await Task.Delay(job.Duration, token);
+            job.Status = "完成";
+        }
+        catch (OperationCanceledException)
+        {
+            job.Status = "已取消";
+            throw;
+        }
+        finally
+        {
+            job.End = stopwatch.ElapsedMilliseconds;
+        }
+    }
+
+    async Task Execute(CancellationToken token)
+    {
+        switch (mode)
+        {
+            case "sequential":
+                foreach (var job in jobs) await DoJob(job, CancellationToken.None);
+                note = $"一个接一个，总共 ≈ 500 + 300 + 700 = <strong>1500 ms</strong>（实测 {(int)Elapsed} ms）。后一个要等前一个结束才开始。";
+                break;
+            case "whenall":
+                await Task.WhenAll(jobs.Select(job => DoJob(job, CancellationToken.None)));
+                note = $"三个<strong>同时开始</strong>，总耗时只取决于最慢的那个：≈ <strong>700 ms</strong>（实测 {(int)Elapsed} ms）。";
+                break;
+            case "whenany":
+                var tasks = jobs.Select(job => DoJob(job, token)).ToList();
+                var first = await Task.WhenAny(tasks);
+                var winner = jobs[tasks.IndexOf(first)].Name;
+                cts!.Cancel();
+                try { await Task.WhenAll(tasks); } catch (OperationCanceledException) { }
+                note = $"<strong>{winner}</strong> 最先完成，<code>WhenAny</code> 立刻返回；我们随后取消了其余的任务。适合“谁先回来用谁”（多个备用设备）。";
+                break;
+            case "timeout":
+                var all = jobs.Select(job => DoJob(job, CancellationToken.None)).ToList();
+                try
+                {
+                    await Task.WhenAll(all).WaitAsync(TimeSpan.FromMilliseconds(450));
+                }
+                catch (TimeoutException)
+                {
+                    note = "等了 450 ms 就<strong>不等了</strong>（抛出 <code>TimeoutException</code>），但看横条：没跑完的任务<strong>还在后台继续</strong>。<code>WaitAsync</code> 只是不再等，并不会让任务停下；要停任务得靠 CancellationToken。";
+                }
+
+                await Task.WhenAll(all);
+                break;
+            default:
+                cts!.CancelAfter(350);
+                try
+                {
+                    await Task.WhenAll(jobs.Select(job => DoJob(job, token)));
+                }
+                catch (OperationCanceledException)
+                {
+                    note = "350 ms 时“用户点了停止”（<code>CancelAfter(350)</code>）：已经完成的保留，没完成的任务在 <code>Task.Delay</code> 处抛出取消异常，<strong>立刻停下</strong>——横条在 350 ms 处戛然而止。";
+                }
+
+                break;
+        }
+    }
+
+    string ModeCode => mode switch
+    {
+        "whenall" => "await Task.WhenAll(jobs.Select(job => DoJob(job)));   // 同时开始，等全部结束",
+        "whenany" => "var first = await Task.WhenAny(tasks);   // 谁先完成就返回\ncts.Cancel();                        // 其余的取消掉",
+        "timeout" => "try { await Task.WhenAll(all).WaitAsync(TimeSpan.FromMilliseconds(450)); }\ncatch (TimeoutException) { /* 不再等了，但任务还在跑 */ }",
+        "cancel" => "cts.CancelAfter(350);   // 350ms 后发出取消信号\ntry { await Task.WhenAll(jobs.Select(job => DoJob(job, cts.Token))); }\ncatch (OperationCanceledException) { /* 被取消 */ }",
+        _ => "foreach (var job in jobs)\n    await DoJob(job);   // 一个接一个",
+    } + "\n\nasync Task DoJob(Job job, CancellationToken token = default)\n{\n    await Task.Delay(job.Duration, token);   // 模拟读设备；永远用 Task.Delay，不要 Thread.Sleep\n}";
+
+    // 样式：横条与轴
+    static readonly Attrs ChartLayer = new() { Sx = Chart };
+    static readonly Attrs RowLayer = new() { Sx = Row };
+    static readonly Attrs AxisLayer = new() { Sx = Row };
+    static readonly Attrs NameLayer = new() { Sx = NameStyle };
+    static readonly Attrs TrackLayer = new() { Sx = Track };
+    static readonly Attrs MarkerLayer = new() { Sx = Marker };
+    static readonly Attrs TickLayer = new() { Sx = Tick1 };
+    static readonly Attrs BarRunning = new() { Sx = Sx.Of(Bar, BarAccent) };
+    static readonly Attrs BarDone = new() { Sx = Sx.Of(Bar, BarSuccess) };
+    static readonly Attrs BarCancelled = new() { Sx = Sx.Of(Bar, BarDanger) };
+
+    static Attrs BarFor(string status) => status switch { "完成" => BarDone, "已取消" => BarCancelled, _ => BarRunning };
+
+    static Style Chart => Css.Define(static () => new Style { Display = Display.Flex, FlexDirection = FlexDirection.Column, Gap = Space.Sm, Padding = Space.Md, BorderRadius = Radii.Md, BackgroundColor = Colors.SurfaceMuted });
+
+    static Style Row => Css.Define(static () => new Style { Display = Display.Flex, AlignItems = AlignItems.Center, Gap = Space.Md });
+
+    static Style NameStyle => Css.Define(static () => new Style { Width = CssLength.Rem(8), FlexShrink = 0, FontSize = CssLength.Rem(0.85) });
+
+    static Style Track => Css.Define(static () => new Style { Position = Position.Relative, Height = CssLength.Rem(1.75), Flex = "1", BackgroundColor = Colors.Fill, BorderRadius = Radii.Sm });
+
+    static Style Bar => Css.Define(static () => new Style { Position = Position.Absolute, Top = 0, Height = CssLength.Percent(100), BorderRadius = Radii.Sm, Overflow = Overflow.Hidden, FontSize = CssLength.Rem(0.7), PaddingInlineStart = Space.Xs, WhiteSpace = WhiteSpace.Nowrap });
+
+    static Style BarAccent => Css.Define(static () => new Style { BackgroundColor = Tones.Accent.Soft, Color = Tones.Accent.Text });
+
+    static Style BarSuccess => Css.Define(static () => new Style { BackgroundColor = Tones.Success.Soft, Color = Tones.Success.Text });
+
+    static Style BarDanger => Css.Define(static () => new Style { BackgroundColor = Tones.Danger.Soft, Color = Tones.Danger.Text });
+
+    static Style Marker => Css.Define(static () => new Style { Position = Position.Absolute, Top = 0, Width = CssLength.Rem(0.125), Height = CssLength.Percent(100), BackgroundColor = Tones.Danger.Solid });
+
+    static Style Tick1 => Css.Define(static () => new Style { Position = Position.Absolute, FontSize = CssLength.Rem(0.7), Color = Colors.TextMuted });
+
+    // ---- 演示 2：UI 线程 ----
+    string uiMode = "block";
+
+    sealed record Segment(double From, double To, string Kind, string Text);
+
+    (string Label, Segment[] Segments)[] UiRows => uiMode switch
+    {
+        "block" => [("UI 线程", [new(0, 1000, "bad", "卡死：线程被 .Result 占着干等，点不动、拖不动")]), ("读设备", [new(0, 1000, "run", "读设备（还占着 UI 线程）")])],
+        "await" => [("UI 线程", [new(0, 60, "ok", "发起"), new(60, 940, "idle", "空闲：可以响应点击、重绘"), new(940, 1000, "ok", "更新界面")]), ("读设备", [new(60, 940, "run", "等待设备回应（不占任何线程）")])],
+        _ => [("UI 线程", [new(0, 1000, "idle", "空闲：界面始终流畅")]), ("线程池线程", [new(0, 1000, "run", "在后台算（耗 CPU 的工作）")])],
+    };
+
+    string UiCode => uiMode switch
+    {
+        "block" => "// 按钮的 Click 处理器（运行在 UI 线程）\nvoid Button_Click(object sender, EventArgs e)\n{\n    var value = ReadDeviceAsync().Result;   // ❌ 阻塞 UI 线程，界面卡死，甚至死锁\n    label.Text = value.ToString();\n}",
+        "await" => "// 处理器自己改成 async void（事件处理器是 async void 的唯一合理场合）\nasync void Button_Click(object sender, EventArgs e)\n{\n    var value = await ReadDeviceAsync();   // ✅ 等待时 UI 线程是空闲的\n    label.Text = value.ToString();         // await 之后自动回到 UI 线程，可以直接改控件\n}",
+        _ => "async void Button_Click(object sender, EventArgs e)\n{\n    // 耗 CPU 的同步计算丢到线程池，不占 UI 线程\n    var crc = await Task.Run(() => ComputeCrc(hugeBuffer));   // ✅\n    label.Text = crc.ToString();\n}",
+    };
+
+    (string Emoji, string Text) UiNote => uiMode switch
+    {
+        "block" => ("🧊", "<code>.Result</code> 让<strong>UI 线程停在原地等结果</strong>。UI 线程同时负责响应点击和重绘，它被占着，界面就“未响应”。更糟的是：如果异步方法要回到 UI 线程才能继续，而 UI 线程正在等它——互相等待，<strong>死锁</strong>。"),
+        "await" => ("🏖️", "<code>await</code> 在等待期间<strong>不占线程</strong>：UI 线程去干别的（响应点击、重绘），结果回来后再接着往下走，并且<strong>自动回到 UI 线程</strong>，可以直接更新控件。"),
+        _ => ("🏋️", "读设备这种“等”的操作直接 <code>await</code> 即可；真正<strong>吃 CPU</strong> 的计算（解析大文件、压缩、算大量数据）才需要 <code>Task.Run</code> 放到线程池，UI 线程始终保持空闲。"),
+    };
+
+    Attrs SegmentLayer(string kind) => kind switch { "bad" => SegBad, "ok" => SegOk, "run" => SegRun, _ => SegIdle };
+
+    static readonly Attrs SegBad = new() { Sx = Sx.Of(Bar, BarDanger) };
+    static readonly Attrs SegOk = new() { Sx = Sx.Of(Bar, BarSuccess) };
+    static readonly Attrs SegRun = new() { Sx = Sx.Of(Bar, BarAccent) };
+    static readonly Attrs SegIdle = new() { Sx = Sx.Of(Bar, SegmentIdle) };
+
+    static Style SegmentIdle => Css.Define(static () => new Style { BackgroundColor = Colors.FillHover, Color = Colors.TextMuted });
+
+    public void Dispose()
+    {
+        running = false;
+        cts?.Cancel();
+        cts?.Dispose();
+    }
+}

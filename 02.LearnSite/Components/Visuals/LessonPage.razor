@@ -1,0 +1,43 @@
+@*
+    每一课页面的外框：标题 + 导语 + 正文，铺满可用宽度（宽屏上最宽约 1760 像素，居中），不再窄窄一条。
+    正文里用 Demo 排成"左边演示、右边代码"的两栏。
+*@
+@namespace LearnSite.Components.Visuals
+@inherits RuneComponent
+
+<div @attributes="Attrs.Merge(PageLayer)">
+    <Prose Measure="false">
+        <H1>@Title</H1>
+        @if (Intro is not null)
+        {
+            <Paragraph>@Intro</Paragraph>
+        }
+    </Prose>
+    @ChildContent
+</div>
+
+@code {
+    /// <summary>课程标题。</summary>
+    [Parameter] public string Title { get; set; } = "";
+
+    /// <summary>标题下面的导语。</summary>
+    [Parameter] public RenderFragment? Intro { get; set; }
+
+    /// <summary>正文：一个个 Demo、小结。</summary>
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    static readonly Attrs PageLayer = new() { Sx = Page };
+
+    static Style Page => Css.Define(static () => new Style
+    {
+        Display = Display.Flex,
+        FlexDirection = FlexDirection.Column,
+        Gap = Space.Xl,
+        Width = CssLength.Percent(100),
+        MaxWidth = CssLength.Rem(110),
+        MarginInlineStart = CssLength.Auto,
+        MarginInlineEnd = CssLength.Auto,
+        PaddingInlineStart = Space.Lg,
+        PaddingInlineEnd = Space.Lg,
+    });
+}

@@ -1,0 +1,281 @@
+@page "/linq"
+@inherits RuneComponent
+
+@*
+    语法精讲 5：LINQ。对应 01.CSharpSyntax 第 7 课。
+      演示 1：管道——数据一站一站流过 Where / OrderBy / Select / Take，每站打开关，看每一站后剩下什么
+      演示 2：聚合——分组求和、计数、平均、最大
+      演示 3：惰性执行——查询在被遍历时才真正执行，每次遍历都会重新执行
+*@
+
+<LessonPage Title="LINQ：像流水线一样处理集合">
+    <Intro>
+        LINQ 让你对任何集合做过滤、转换、排序、分组、统计，写法像一条<strong>流水线</strong>：数据从上游流下来，每一站只做一件事。
+        对应关系：<Code>Where</Code> = filter，<Code>Select</Code> = map，<Code>Aggregate</Code> = reduce（Java Stream / JS 数组方法同理）。
+    </Intro>
+    <ChildContent>
+        @* ---------- 演示 1：管道 ---------- *@
+        <Demo Title="演示 1：数据流水线（点开关，看每一站的结果）">
+            <Stage>
+                <ToggleGroup SelectionMode="SelectionMode.Multiple" @bind-Values="stages" aria-label="打开哪几站">
+                    <ToggleItem Value="where">Where　筛选</ToggleItem>
+                    <ToggleItem Value="orderby">OrderByDescending　排序</ToggleItem>
+                    <ToggleItem Value="select">Select　转换</ToggleItem>
+                    <ToggleItem Value="take">Take(3)　取前 3 个</ToggleItem>
+                </ToggleGroup>
+                <Flex Direction="LayoutDirection.Column" Gap="SpaceScale.Md">
+                    @foreach (var (title, items) in PipelineRows)
+                    {
+                        <div @key="@($"{title}{string.Join('|', items)}")">
+                            <Small Tone="TextTone.Muted">⬇ @title　→　@items.Length 项</Small>
+                            <Flex Gap="SpaceScale.Sm" Wrap="true">
+                                @foreach (var item in items)
+                                {
+                                    <Slot Name="" Data="@item" />
+                                }
+                                @if (items.Length == 0)
+                                {
+                                    <Small Tone="TextTone.Muted">（没有数据）</Small>
+                                }
+                            </Flex>
+                        </div>
+                    }
+                </Flex>
+            </Stage>
+            <Side>
+                <CodeBlock Code="@PipelineCode" Lang="csharp" Copyable="false" />
+                <Narration @key="@string.Join(',', stages)" Emoji="🏭">
+                    每个方法接收上一站的结果、产出新的结果，<strong>原数据不会被改动</strong>。Where 决定留谁，OrderBy 决定顺序，Select 决定每一项变成什么，Take 决定要几个。
+                    顺序有讲究：先 Where 再 Select，比先 Select 再 Where 少处理很多数据。
+                </Narration>
+                <Quiz Question="orders.Where(o => o.Qty > 1) 之后，原来的 orders 列表会少元素吗？" Options="@(new[] { "会", "不会" })" Answer="1"
+                      Explain="LINQ 不修改原集合，它产出一个新的“视图”。要得到固定的结果列表，用 ToList()。" />
+            </Side>
+        </Demo>
+
+        @* ---------- 演示 2：聚合 ---------- *@
+        <Demo Title="演示 2：分组与统计">
+            <Stage>
+                <ToggleGroup @bind-Value="aggregate" Required="true" aria-label="统计方式">
+                    <ToggleItem Value="sumBy">按客户求总金额</ToggleItem>
+                    <ToggleItem Value="countBy">按产品数订单</ToggleItem>
+                    <ToggleItem Value="average">平均金额</ToggleItem>
+                    <ToggleItem Value="maxBy">金额最大的一单</ToggleItem>
+                    <ToggleItem Value="any">有没有数量 > 3 的</ToggleItem>
+                </ToggleGroup>
+                <Grid MinItemWidth="CssLength.Rem(10)" Gap="SpaceScale.Sm">
+                    @foreach (var (label, value) in AggregateRows)
+                    {
+                        <Slot @key="@($"{aggregate}{label}{value}")" Name="@label" Data="@value" Changed="true" />
+                    }
+                </Grid>
+                <Paragraph Tone="TextTone.Muted">源数据（5 条订单）：</Paragraph>
+                <Flex Gap="SpaceScale.Sm" Wrap="true">
+                    @foreach (var order in orders)
+                    {
+                        <Slot Name="@($"{order.Customer} · {order.Product}")" Data="@($"{order.Qty} × {order.Price} = {order.Amount}")" />
+                    }
+                </Flex>
+            </Stage>
+            <Side>
+                <CodeBlock @key="aggregate" Code="@AggregateCode" Lang="csharp" Copyable="false" />
+                <Narration Emoji="📊">
+                    <Code>GroupBy</Code> 把集合按某个键分成若干组，每组再用 <Code>Sum / Count / Max</Code> 汇总。
+                    .NET 9 还新增了 <Code>CountBy</Code>、<Code>AggregateBy</Code>，一步完成“分组计数/分组聚合”。
+                    <Code>First</Code> 找不到会抛异常，<Code>FirstOrDefault</Code> 找不到返回 null/默认值。
+                </Narration>
+            </Side>
+        </Demo>
+
+        @* ---------- 演示 3：惰性 ---------- *@
+        <Demo Title="演示 3：惰性执行——每遍历一次，查询就重新执行一次">
+            <Stage>
+                <Paragraph Tone="TextTone.Muted">
+                    <Code>var query = orders.Where(o => o.Qty > 1);</Code> 这一行<strong>并不执行</strong>。点下面的按钮遍历它，看谓词被调用了几次（亮起的订单就是这次被检查的）：
+                </Paragraph>
+                <Flex Gap="SpaceScale.Sm" Wrap="true">
+                    <Button Icon="Lucide.Play" @onclick="@(() => Run("count"))">query.Count()</Button>
+                    <Button Icon="Lucide.Play" @onclick="@(() => Run("any"))">query.Any()</Button>
+                    <Button Icon="Lucide.Play" @onclick="@(() => Run("tolist"))">cached = query.ToList()</Button>
+                    <Button Variant="ButtonVariant.Soft" Disabled="@(cached is null)" @onclick="@(() => Run("cachedany"))">cached.Any()</Button>
+                    <Button Variant="ButtonVariant.Ghost" Tone="Tone.Neutral" @onclick="ResetLazy">重来</Button>
+                </Flex>
+                <Flex Gap="SpaceScale.Sm" Wrap="true">
+                    @for (var i = 0; i < orders.Length; i++)
+                    {
+                        var index = i;
+                        <Slot @key="@($"{index}{touched.Contains(index)}{callsTotal}")" Name="@($"订单 {index + 1} · {orders[index].Customer}")" Data="@($"Qty {orders[index].Qty}")" Changed="@touched.Contains(index)" />
+                    }
+                </Flex>
+                <Grid MinItemWidth="CssLength.Rem(12)" Gap="SpaceScale.Sm">
+                    <Readout Title="谓词累计被调用" Value="@($"{callsTotal} 次")" />
+                    <Readout Title="这一次检查了" Value="@($"{touched.Count} 个订单")" />
+                </Grid>
+            </Stage>
+            <Side>
+                <CodeBlock Code="@LazyCode" Lang="csharp" Title="你刚才执行的代码" Copyable="false" />
+                <Narration @key="@lazyNote" Emoji="🐢">@((MarkupString)lazyNote)</Narration>
+                <Quiz Question="query.Count() 再 query.Any()（query 没有 ToList），谓词一共被调用了几次？（订单 1 的数量 > 1）" Options="@(new[] { "5 次", "6 次", "10 次" })" Answer="1"
+                      Explain="Count 要遍历全部 5 个 = 5 次；Any 遇到第一个满足的就停（订单 1 就满足）= 1 次；一共 6 次。每次遍历都重新计算，所以要多次使用同一个查询的结果时，先 ToList()。" />
+            </Side>
+        </Demo>
+    </ChildContent>
+</LessonPage>
+
+@code {
+    sealed record Order(string Customer, string Product, int Qty, decimal Price)
+    {
+        public decimal Amount => Qty * Price;
+    }
+
+    static readonly Order[] orders =
+    [
+        new("Alice", "Valve", 2, 10m),
+        new("Bob", "Pump", 1, 50m),
+        new("Alice", "Pump", 1, 50m),
+        new("Carol", "Valve", 4, 10m),
+        new("Bob", "Valve", 3, 10m),
+    ];
+
+    static string Show(Order o) => $"{o.Customer} {o.Product} ×{o.Qty}　{o.Amount}";
+
+    // ---- 演示 1：管道 ----
+    IReadOnlyList<string> stages = ["where", "orderby"];
+
+    bool Has(string stage) => stages.Contains(stage);
+
+    (string Title, string[] Items)[] PipelineRows
+    {
+        get
+        {
+            var rows = new List<(string, string[])>();
+            IEnumerable<Order> query = orders;
+            rows.Add(("数据源 orders", [.. query.Select(Show)]));
+            if (Has("where"))
+            {
+                query = query.Where(o => o.Qty > 1);
+                rows.Add(("Where(o => o.Qty > 1)", [.. query.Select(Show)]));
+            }
+
+            if (Has("orderby"))
+            {
+                query = query.OrderByDescending(o => o.Amount);
+                rows.Add(("OrderByDescending(o => o.Amount)", [.. query.Select(Show)]));
+            }
+
+            IEnumerable<string>? projected = null;
+            if (Has("select"))
+            {
+                projected = query.Select(o => $"{o.Customer}：{o.Amount}");
+                rows.Add(("Select(o => $\"{o.Customer}：{o.Amount}\")", [.. projected]));
+            }
+
+            if (Has("take"))
+            {
+                if (projected is not null)
+                {
+                    projected = projected.Take(3);
+                    rows.Add(("Take(3)", [.. projected]));
+                }
+                else
+                {
+                    query = query.Take(3);
+                    rows.Add(("Take(3)", [.. query.Select(Show)]));
+                }
+            }
+
+            return [.. rows];
+        }
+    }
+
+    string PipelineCode
+    {
+        get
+        {
+            var chain = new List<string> { "orders" };
+            if (Has("where")) chain.Add("    .Where(o => o.Qty > 1)");
+            if (Has("orderby")) chain.Add("    .OrderByDescending(o => o.Amount)");
+            if (Has("select")) chain.Add("    .Select(o => $\"{o.Customer}：{o.Amount}\")");
+            if (Has("take")) chain.Add("    .Take(3)");
+            var last = PipelineRows[^1];
+            return "var result = " + string.Join("\n", chain) + "\n    .ToList();\n\n// result = [" + string.Join(", ", last.Items.Select(i => $"\"{i}\"")) + "]";
+        }
+    }
+
+    // ---- 演示 2：聚合 ----
+    string aggregate = "sumBy";
+
+    (string Label, string Value)[] AggregateRows => aggregate switch
+    {
+        "sumBy" => [.. orders.GroupBy(o => o.Customer).Select(g => (g.Key, g.Sum(o => o.Amount).ToString()))],
+        "countBy" => [.. orders.CountBy(o => o.Product).Select(p => (p.Key, $"{p.Value} 单"))],
+        "average" => [("平均金额", orders.Average(o => o.Amount).ToString("F2"))],
+        "maxBy" => orders.MaxBy(o => o.Amount) is { } max ? [(max.Customer + " · " + max.Product, max.Amount.ToString())] : [],
+        _ => [("Any(Qty > 3)", orders.Any(o => o.Qty > 3).ToString()), ("All(Qty > 0)", orders.All(o => o.Qty > 0).ToString())],
+    };
+
+    string AggregateCode => aggregate switch
+    {
+        "sumBy" => "var totals = orders\n    .GroupBy(o => o.Customer)\n    .Select(g => (g.Key, Total: g.Sum(o => o.Amount)));",
+        "countBy" => "var counts = orders.CountBy(o => o.Product);   // .NET 9：一步分组计数",
+        "average" => "var average = orders.Average(o => o.Amount);",
+        "maxBy" => "var biggest = orders.MaxBy(o => o.Amount);   // 返回“让金额最大的那个订单”本身",
+        _ => "var anyBig = orders.Any(o => o.Qty > 3);   // 有一个满足就停\nvar allPositive = orders.All(o => o.Qty > 0);   // 全部满足才是 true",
+    };
+
+    // ---- 演示 3：惰性 ----
+    int callsTotal;
+    readonly List<int> touched = [];
+    readonly List<string> lazyLog = [];
+    List<Order>? cached;
+    string lazyNote = "点上面的按钮遍历查询。";
+
+    bool Probe(Order order)
+    {
+        callsTotal++;
+        touched.Add(Array.IndexOf(orders, order));
+        return order.Qty > 1;
+    }
+
+    IEnumerable<Order> Query => orders.Where(Probe);
+
+    void Run(string action)
+    {
+        touched.Clear();
+        var before = callsTotal;
+        switch (action)
+        {
+            case "count":
+                var count = Query.Count();
+                lazyLog.Add($"var c = query.Count();   // {count}，检查了全部 5 个订单");
+                lazyNote = $"<code>Count()</code> 要数清楚有几个，只能<strong>把全部订单都检查一遍</strong>（{callsTotal - before} 次）。";
+                break;
+            case "any":
+                var any = Query.Any();
+                lazyLog.Add($"var a = query.Any();   // {any}，只检查了 {touched.Count} 个就停了");
+                lazyNote = $"<code>Any()</code> 找到第一个满足条件的就<strong>立刻停止</strong>，只检查了 {callsTotal - before} 个订单。注意：这是<strong>又一次重新执行</strong>，累计次数继续增加。";
+                break;
+            case "tolist":
+                cached = Query.ToList();
+                lazyLog.Add($"var cached = query.ToList();   // 遍历一次，把结果固定下来，{cached.Count} 个");
+                lazyNote = $"<code>ToList()</code> 遍历了一次（{callsTotal - before} 次），把结果存成了真正的列表。之后对 <code>cached</code> 的操作不再触发谓词。";
+                break;
+            case "cachedany":
+                var cachedAny = cached!.Any();
+                lazyLog.Add($"var b = cached.Any();   // {cachedAny}，谓词没有被调用（{callsTotal - before} 次）");
+                lazyNote = "对已经固定下来的列表操作，<strong>谓词一次都没有再被调用</strong>。同一个查询要用好几次、或者谓词很耗时，就先 ToList()。";
+                break;
+        }
+    }
+
+    void ResetLazy()
+    {
+        callsTotal = 0;
+        touched.Clear();
+        lazyLog.Clear();
+        cached = null;
+        lazyNote = "点上面的按钮遍历查询。";
+    }
+
+    string LazyCode => "var query = orders.Where(o => o.Qty > 1);   // 只是定义，没有执行\n" + string.Join("\n", lazyLog.TakeLast(8));
+}

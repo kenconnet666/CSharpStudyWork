@@ -10,87 +10,80 @@
     字节都是 BinaryPrimitives / 位运算当场算出来的，和 01.CSharpSyntax 练习 12 用的是同一套方法。
 *@
 
-<Container Size="ContainerSize.Lg" Padding="SpaceScale.None">
-    <Flex Direction="LayoutDirection.Column" Gap="SpaceScale.Xl">
-
-        <Prose Measure="false">
-            <H1>大小端：一个数，两种排法</H1>
-            <Paragraph>
-                寄存器值 <Code>0x1234</Code> 有两个字节：高字节 <Code>12</Code>、低字节 <Code>34</Code>。通信时先发哪个，两边必须约定好，
-                这就是<strong>字节序</strong>。
-            </Paragraph>
-        </Prose>
-
+<LessonPage Title="大小端：一个数，两种排法">
+    <Intro>
+        寄存器值 <Code>0x1234</Code> 有两个字节：高字节 <Code>12</Code>、低字节 <Code>34</Code>。通信时先发哪个，两边必须约定好，
+        这就是<strong>字节序</strong>。
+    </Intro>
+    <ChildContent>
         <Narration Emoji="📅">
             打个比方：同一个日期，中国人写 <strong>2026年11月10日</strong>（从大到小，像<strong>大端</strong>），
             欧洲人写 <strong>10/11/2026</strong>（从小到大，像<strong>小端</strong>）。日期没变，写法不同，
             读的人如果不知道对方的习惯，就会读错。Modbus、西门子 S7 用大端，x86 电脑的内存用小端。
         </Narration>
 
-        @* ---------- 演示 1 ---------- *@
-        <Card>
-            <Header><Strong>演示 1：一个数，两种排法</Strong></Header>
-            <ChildContent>
-                <Flex Direction="LayoutDirection.Column" Gap="SpaceScale.Lg">
-                    <Flex Gap="SpaceScale.Md" Align="ItemAlign.End" Wrap="true">
-                        <Field Label="十六进制数值" Error="@(valid ? null : "请输入十六进制数字（0~9、A~F）")">
-                            <TextField @bind-Value="hex" @bind-Value:after="Parse"><Prefix>0x</Prefix></TextField>
-                        </Field>
-                        <ToggleGroup @bind-Value="width" Required="true" aria-label="位宽" @bind-Value:after="Parse">
-                            <ToggleItem Value="16">16 位（ushort）</ToggleItem>
-                            <ToggleItem Value="32">32 位（uint）</ToggleItem>
+        <Demo Title="演示 1：一个数，两种排法">
+            <Stage>
+                <Flex Gap="SpaceScale.Md" Align="ItemAlign.End" Wrap="true">
+                    <Field Label="十六进制数值" Error="@(valid ? null : "请输入十六进制数字（0~9、A~F）")">
+                        <TextField @bind-Value="hex" @bind-Value:after="Parse"><Prefix>0x</Prefix></TextField>
+                    </Field>
+                    <ToggleGroup @bind-Value="width" Required="true" aria-label="位宽" @bind-Value:after="Parse">
+                        <ToggleItem Value="16">16 位（ushort）</ToggleItem>
+                        <ToggleItem Value="32">32 位（uint）</ToggleItem>
+                    </ToggleGroup>
+                </Flex>
+                <Flex Gap="SpaceScale.Sm" Wrap="true">
+                    <Button Variant="ButtonVariant.Soft" Tone="Tone.Neutral" @onclick="@(() => Preset("16", "1234"))">0x1234</Button>
+                    <Button Variant="ButtonVariant.Soft" Tone="Tone.Neutral" @onclick="@(() => Preset("16", "000A"))">0x000A（10）</Button>
+                    <Button Variant="ButtonVariant.Soft" Tone="Tone.Neutral" @onclick="@(() => Preset("32", "00010002"))">0x00010002</Button>
+                    <Button Variant="ButtonVariant.Soft" Tone="Tone.Neutral" @onclick="@(() => Preset("32", "3FC00000"))">0x3FC00000（1.5f）</Button>
+                </Flex>
+                <Flex Direction="LayoutDirection.Column" Gap="SpaceScale.Sm">
+                    <ByteCells Label="大端（先放高位）" Bytes="Big" Ranks="BigRanks" Tags="BigTags" />
+                    <ByteCells Label="小端（先放低位）" Bytes="Little" Ranks="LittleRanks" Tags="LittleTags" />
+                </Flex>
+            </Stage>
+            <Side>
+                <CodeBlock Code="@Code" Lang="csharp" Copyable="false" />
+                <Narration @key="@($"{hex}{width}")" Emoji="🎨">
+                    看颜色：<strong>同一个字节在两行里颜色相同</strong>（橙色是最高位字节），只是位置反了。
+                    大端的内存读起来和我们写数字的顺序一致，小端则是倒过来的。
+                </Narration>
+            </Side>
+        </Demo>
+
+        <Demo Title="演示 2：发过去，读出来">
+            <Stage>
+                <Paragraph Tone="TextTone.Muted">
+                    发送方把上面输入的数（<Code>@("0x" + value.ToString(Format))</Code>）一个字节一个字节发出去，接收方按自己的习惯拼回来。分别选双方的字节序，点"发送"。
+                </Paragraph>
+                <Flex Gap="SpaceScale.Xl" Wrap="true">
+                    <Field Label="发送方">
+                        <ToggleGroup @bind-Value="sender" Required="true" aria-label="发送方字节序">
+                            <ToggleItem Value="big">大端</ToggleItem>
+                            <ToggleItem Value="little">小端</ToggleItem>
                         </ToggleGroup>
-                    </Flex>
-                    <Flex Gap="SpaceScale.Sm" Wrap="true">
-                        <Button Variant="ButtonVariant.Soft" Tone="Tone.Neutral" @onclick="@(() => Preset("16", "1234"))">0x1234</Button>
-                        <Button Variant="ButtonVariant.Soft" Tone="Tone.Neutral" @onclick="@(() => Preset("16", "000A"))">0x000A（10）</Button>
-                        <Button Variant="ButtonVariant.Soft" Tone="Tone.Neutral" @onclick="@(() => Preset("32", "00010002"))">0x00010002</Button>
-                        <Button Variant="ButtonVariant.Soft" Tone="Tone.Neutral" @onclick="@(() => Preset("32", "3FC00000"))">0x3FC00000（1.5f）</Button>
-                    </Flex>
-
-                    <Flex Direction="LayoutDirection.Column" Gap="SpaceScale.Sm">
-                        <ByteCells Label="大端（先放高位）" Bytes="Big" Ranks="BigRanks" Tags="BigTags" />
-                        <ByteCells Label="小端（先放低位）" Bytes="Little" Ranks="LittleRanks" Tags="LittleTags" />
-                    </Flex>
-
-                    <CodeBlock Code="@Code" Lang="csharp" Copyable="false" />
-                    <Narration @key="@($"{hex}{width}")" Emoji="🎨">
-                        看颜色：<strong>同一个字节在两行里颜色相同</strong>（橙色是最高位字节），只是位置反了。
-                        大端的内存读起来和我们写数字的顺序一致，小端则是倒过来的。
-                    </Narration>
+                    </Field>
+                    <Field Label="接收方">
+                        <ToggleGroup @bind-Value="receiver" Required="true" aria-label="接收方字节序">
+                            <ToggleItem Value="big">大端</ToggleItem>
+                            <ToggleItem Value="little">小端</ToggleItem>
+                        </ToggleGroup>
+                    </Field>
                 </Flex>
-            </ChildContent>
-        </Card>
-
-        @* ---------- 演示 2 ---------- *@
-        <Card>
-            <Header><Strong>演示 2：发过去，读出来</Strong></Header>
-            <ChildContent>
-                <Flex Direction="LayoutDirection.Column" Gap="SpaceScale.Lg">
-                    <Paragraph Tone="TextTone.Muted">
-                        发送方把上面输入的数（<Code>@("0x" + value.ToString(Format))</Code>）一个字节一个字节发出去，接收方按自己的习惯拼回来。分别选双方的字节序，点"发送"。
-                    </Paragraph>
-                    <Flex Gap="SpaceScale.Xl" Wrap="true">
-                        <Field Label="发送方">
-                            <ToggleGroup @bind-Value="sender" Required="true" aria-label="发送方字节序">
-                                <ToggleItem Value="big">大端</ToggleItem>
-                                <ToggleItem Value="little">小端</ToggleItem>
-                            </ToggleGroup>
-                        </Field>
-                        <Field Label="接收方">
-                            <ToggleGroup @bind-Value="receiver" Required="true" aria-label="接收方字节序">
-                                <ToggleItem Value="big">大端</ToggleItem>
-                                <ToggleItem Value="little">小端</ToggleItem>
-                            </ToggleGroup>
-                        </Field>
-                    </Flex>
-                    <WireDemo Value="value" Size="Size" SenderBig="@(sender == "big")" ReceiverBig="@(receiver == "big")" />
-                    <Quiz Question="设备按大端发来 00 0A，你按小端去读，会得到多少？"
-                          Options="@(new[] { "10", "2560", "0x0A", "257" })" Answer="1"
-                          Explain="按小端读，先到的 00 是低字节、后到的 0A 是高字节，拼出 0x0A00，十进制 2560，而不是 10。" />
-                </Flex>
-            </ChildContent>
-        </Card>
+                <WireDemo Value="value" Size="Size" SenderBig="@(sender == "big")" ReceiverBig="@(receiver == "big")" />
+            </Stage>
+            <Side>
+                <CodeBlock Code="@WireCode" Lang="csharp" Copyable="false" />
+                <Quiz Question="设备按大端发来 00 0A，你按小端去读，会得到多少？"
+                      Options="@(new[] { "10", "2560", "0x0A", "257" })" Answer="1"
+                      Explain="按小端读，先到的 00 是低字节、后到的 0A 是高字节，拼出 0x0A00，十进制 2560，而不是 10。" />
+                <Quiz Question="BitConverter.ToUInt16 在 x86 电脑上默认按什么字节序读？"
+                      Options="@(new[] { "大端", "小端" })" Answer="1"
+                      Explain="BitConverter 用本机字节序，x86/x64 是小端。直接拿它解析 Modbus（大端）数据会读错，要用 BinaryPrimitives 明确指定。" />
+            </Side>
+        </Demo>
 
         <Prose Measure="false">
             <H2>要记住的</H2>
@@ -101,8 +94,8 @@
                 <li>读到"离谱的数值"，第一个要怀疑的就是字节序。</li>
             </ul>
         </Prose>
-    </Flex>
-</Container>
+    </ChildContent>
+</LessonPage>
 
 @code {
     string hex = "1234";
@@ -136,6 +129,24 @@
           $"BinaryPrimitives.WriteUInt16LittleEndian(buffer, 0x{value:X4});   // buffer = {Convert.ToHexString(Little)}"
         : $"BinaryPrimitives.WriteUInt32BigEndian(buffer, 0x{value:X8});      // buffer = {BigHex}\n" +
           $"BinaryPrimitives.WriteUInt32LittleEndian(buffer, 0x{value:X8});   // buffer = {Convert.ToHexString(Little)}";
+
+
+    // 接收方按自己选的字节序读取时用的代码
+    string WireCode
+    {
+        get
+        {
+            var type = Size == 2 ? "UInt16" : "UInt32";
+            var digits = Size == 2 ? "X4" : "X8";
+            var senderOrder = sender == "big" ? "Big" : "Little";
+            var receiverOrder = receiver == "big" ? "Big" : "Little";
+            return string.Join("\n",
+                $"// 发送方",
+                $"BinaryPrimitives.Write{type}{senderOrder}Endian(buffer, 0x{value.ToString(digits)});",
+                "// 接收方",
+                $"var value = BinaryPrimitives.Read{type}{receiverOrder}Endian(received);");
+        }
+    }
 
     protected override void OnInitialized() => Parse();
 
