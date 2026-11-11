@@ -12,6 +12,25 @@
         字符串插值能直接带格式、空值有一整套运算符、元组和范围让代码更短。每一项都在下面做成了可以拨动的演示。
     </Intro>
     <ChildContent>
+        <ConceptGuide>
+            <Concept Term="基本类型与大小" Analogy="不同大小的盒子：byte 是小火柴盒（0~255），int 是鞋盒，long 是大纸箱。盒子越大，能装的数越大，也越占地方。" Compare="C# 的 byte 是无符号的（0~255），Java 的 byte 是有符号的；JS 只有一种 number。">
+                工业通信里经常要<strong>精确到字节</strong>：寄存器是 16 位（<Code>ushort</Code>），状态字是 <Code>byte</Code>，计数器可能是 <Code>int</Code>。选对类型，才能和协议里的字段一一对应。
+            </Concept>
+            <Concept Term="var：让编译器推断类型" Analogy="你说「给我来一杯」，服务员看你手里拿的是什么就知道是什么。" Compare="和 Java 10 的 var、TypeScript 的类型推断类似；注意它仍然是静态类型，不是 JS 里的动态类型。">
+                <Code>var x = 5;</Code> 之后 x 就<strong>永远是 int</strong>，不能再赋成字符串。
+            </Concept>
+            <Concept Term="字符串插值与格式说明符" Analogy="填空题：模板里留出空位，冒号后面写「怎么显示」。">
+                <Code>$"温度 &#123;t:F1&#125;"</Code> 把变量放进字符串；冒号后是格式：<Code>F2</Code> 两位小数、<Code>X2</Code> 两位十六进制、<Code>D5</Code> 补零到 5 位。比 JS 的模板字符串多了「格式」这一层。
+            </Concept>
+            <Concept Term="null 与空值处理" Analogy="null 是一张空白的收货地址：你拿它去送快递就会出错。" Compare="相当于 Java 的 null / JS 的 null；C# 用 ? 在类型后明确标出「可以为 null」。">
+                <Code>obj?.Name</Code>：obj 是 null 就整个得 null，不抛异常；<Code>a ?? b</Code>：a 是 null 才用 b；<Code>a ??= b</Code>：a 是 null 就赋成 b。
+            </Concept>
+            <Concept Term="范围与索引：^ 和 .." Compare="Python 的切片 a[1:3] / a[-1] 的 C# 版本，Java 没有对应的写法。">
+                <Code>arr[^1]</Code> 表示倒数第 1 个，<Code>arr[1..4]</Code> 表示下标 1 到 3（<strong>不含 4</strong>）。拆协议帧时特别方便：<Code>frame[..2]</Code> 取头两个字节。
+            </Concept>
+        </ConceptGuide>
+
+
         @* ---------- 演示 1：类型与 var ---------- *@
         <Demo Title="演示 1：基本类型与 var 推断">
             <Stage>

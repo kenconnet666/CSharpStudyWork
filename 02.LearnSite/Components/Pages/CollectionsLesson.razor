@@ -14,6 +14,25 @@
         集合就是装一堆数据的容器，选对容器，代码就简单：要顺序用 <Code>List</Code>，按名字找用 <Code>Dictionary</Code>，去重用 <Code>HashSet</Code>，先进先出用 <Code>Queue</Code>。
     </Intro>
     <ChildContent>
+        <ConceptGuide>
+            <Concept Term="泛型与 List" Analogy="贴了标签的收纳盒：装整数的 List 只能放整数，放错东西编译器当场报错。" Compare="和 Java 的 ArrayList 类似；C# 的泛型在运行期保留类型，所以 int 放进去不会装箱。">
+                T 是「类型占位符」。同一套 List 代码可以装任何类型，同时保持类型安全。长度可变、按下标取值 O(1)。
+            </Concept>
+            <Concept Term="Dictionary（键值表）" Analogy="通讯录：按名字（键）直接找电话（值），不用从头翻。" Compare="相当于 Java 的 HashMap / JS 的 Map。">
+                按键查找几乎是常数时间。读不存在的键会抛异常，所以常写 <Code>TryGetValue</Code>。上位机里常用来按「寄存器地址 / 设备名」找对应的数据。
+            </Concept>
+            <Concept Term="HashSet 与 Queue" Analogy="HashSet 是「去重的签到表」；Queue 是「排队」，先来先出。">
+                HashSet 判断「在不在」极快并自动去重；Queue 先进先出，适合缓冲接收到的报文，慢慢处理。
+            </Concept>
+            <Concept Term="环形缓冲区" Analogy="一个只有几个座位的旋转寿司台：满了以后新来的盘子会顶掉最老的。">
+                固定容量，写满后覆盖最旧的数据。常用于「只保留最近 N 个采样值」（趋势曲线、滑动平均），内存占用不会无限增长。
+            </Concept>
+            <Concept Term="yield return：惰性" Analogy="自助餐的现做档口：你喊一个才做一个，不会一次性把整桌菜全做好。">
+                带 <Code>yield return</Code> 的方法不会一次算完，而是<strong>每被取一个才算一个</strong>。这样可以处理很大甚至无限的数据流，也是 LINQ 的工作基础。
+            </Concept>
+        </ConceptGuide>
+
+
         @* ---------- 演示 1：集合操场 ---------- *@
         <Demo Title="演示 1：集合操场">
             <Stage>

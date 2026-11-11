@@ -14,6 +14,22 @@
         <Code>class</Code>、数组 这类<strong>引用类型</strong>，变量里装的是"指向对象的地址"，赋值只是多了一个指向同一个对象的地址。
     </Intro>
     <ChildContent>
+        <ConceptGuide>
+            <Concept Term="栈（stack）与堆（heap）" Analogy="栈像你手里正拿着的东西，用完就放下，很快；堆像仓库，要用时按「货架号」去取，空间大但慢一点。">
+                局部变量的小数据通常直接放在栈上，随方法结束自动消失；较大的、需要活得更久的对象放在堆上，由<strong>垃圾回收器（GC）</strong>在没人用时回收。
+            </Concept>
+            <Concept Term="值类型（struct、int、bool 等）" Analogy="复印件：把一份文件复印给朋友，他在自己的那份上涂改，你的原件不受影响。" Compare="相当于 Java 的基本类型（int、double），但 C# 还允许自己定义值类型（struct）。">
+                变量里<strong>直接装着数据本身</strong>。赋值 <Code>b = a</Code> 会<strong>复制一份</strong>，之后改 b 不影响 a。
+            </Concept>
+            <Concept Term="引用类型（class、数组、string 等）" Analogy="同一份在线文档的链接：把链接发给朋友，你们打开的是同一份文档，谁改了对方都能看到。" Compare="和 Java / JS 里的对象完全一致：变量存的是「地址」。">
+                变量里装的是<strong>指向堆里对象的地址</strong>。赋值 <Code>b = a</Code> 只复制地址，两个变量指向<strong>同一个对象</strong>，改其中一个，另一个也看得到。
+            </Concept>
+            <Concept Term="string 为什么「看起来像值类型」" Analogy="一张已经印好的纸，要改字只能重新印一张新的，旧的不变。">
+                string 是引用类型，但它<strong>不可变</strong>：任何「修改」（拼接、替换）都生成一个新字符串，所以你感觉不到共享带来的副作用。大量拼接时用 <Code>StringBuilder</Code>。
+            </Concept>
+        </ConceptGuide>
+
+
         <Narration Mood="📄">
             打个比方：<strong>值类型 = 复印一份文件</strong>，你在复印件上涂改，原件不受影响；
             <strong>引用类型 = 给同一份在线文档发一个链接</strong>，谁通过链接修改，所有人看到的都变了。

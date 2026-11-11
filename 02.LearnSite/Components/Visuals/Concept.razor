@@ -1,0 +1,32 @@
+@*
+    概念先导里的一条：术语（粗体）+ 大白话解释 + 生活类比 + 与 Java / JS 的对照。
+*@
+@namespace LearnSite.Components.Visuals
+@inherits RuneComponent
+
+<Flex Direction="LayoutDirection.Column" Gap="SpaceScale.Xs">
+    <Strong>@Term</Strong>
+    <Paragraph>@ChildContent</Paragraph>
+    @if (Analogy is not null)
+    {
+        <Alert Tone="Tone.Info" Icon="Lucide.Lightbulb" Label="类比"><strong>类比：</strong>@Analogy</Alert>
+    }
+    @if (Compare is not null)
+    {
+        <Paragraph Tone="TextTone.Muted"><Icon Data="Lucide.ArrowLeftRight" /> <strong>对照 Java / JS：</strong>@Compare</Paragraph>
+    }
+</Flex>
+
+@code {
+    /// <summary>概念名。</summary>
+    [Parameter, EditorRequired] public string Term { get; set; } = "";
+
+    /// <summary>生活里的类比。</summary>
+    [Parameter] public string? Analogy { get; set; }
+
+    /// <summary>和 Java / JS 的对照。</summary>
+    [Parameter] public string? Compare { get; set; }
+
+    /// <summary>用大白话写的解释。</summary>
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

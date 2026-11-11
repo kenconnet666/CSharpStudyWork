@@ -15,6 +15,23 @@
         （最右边 1 分，往左依次 2、4、8……128 分），<strong>开着的开关分值加起来，就是这个字节的值</strong>。
     </Intro>
     <ChildContent>
+        <ConceptGuide>
+            <Concept Term="位（bit）与字节（byte）" Analogy="一个位就是一个只有「开 / 关」两种状态的开关；8 个开关排成一排，就是一个字节。">
+                计算机里所有东西最终都是 0 和 1。一个位只能是 0 或 1；<strong>8 个位 = 1 个字节</strong>，能表示 0~255 共 256 种组合。
+                PLC 里一个「状态字」常常只是一个字节：每一位代表一个独立的开关（有没有报警、电机是否在转）。
+            </Concept>
+            <Concept Term="位运算：与、或、异或、取反、移位" Analogy="与（&）像「两个开关都要开」，或（|）像「有一个开就行」，异或（^）像「两个不一样才亮」，取反（~）是把每个开关反过来。" Compare="Java 和 JS 的位运算符完全一样；区别是 C# 有专门的 byte 类型，Java 的 byte 是有符号的。">
+                位运算是<strong>对每一位分别运算</strong>，而不是把整个数当数字算。左移 <Code>&lt;&lt; n</Code> 相当于把所有位向左挪 n 格，空出来的补 0，数值大致乘以 2 的 n 次方。
+            </Concept>
+            <Concept Term="掩码（mask）" Analogy="像一张只在某些位置挖了洞的纸盖在数据上：洞下面的位你能看到、能改，其余的位被遮住不受影响。">
+                想只读第 3 位，就用 <Code>value &amp; 0b0000_1000</Code>：别的位都被清成 0，只留下第 3 位。想只把第 3 位置 1 用 <Code>|</Code>，清 0 用 <Code>&amp; ~mask</Code>，翻转用 <Code>^</Code>。
+            </Concept>
+            <Concept Term="[Flags] 枚举" Analogy="给每个开关起个名字，再允许把几个名字「拼」在一起，比如 Overheat | Offline 表示两个报警同时发生。">
+                枚举每个成员占一位（1、2、4、8……），一个变量就能同时记住好几个状态；判断有没有某个状态用 <Code>HasFlag</Code> 或 <Code>(value &amp; X) != 0</Code>。
+            </Concept>
+        </ConceptGuide>
+
+
         <Demo Title="演示 1：拨动 8 个开关">
             <Stage>
                 <BitRow Label="byte" @bind-Value="single" />

@@ -14,6 +14,22 @@
         <Code>ref</Code>；想让方法把结果"送回来"，用 <Code>out</Code>。Java 里没有这两个关键字，是 C# 的一个特色。
     </Intro>
     <ChildContent>
+        <ConceptGuide>
+            <Concept Term="默认：按值传递" Analogy="把文件复印一份交给别人：他随便涂改都不影响你的原件。">
+                调用方法时，实参的<strong>值被复制</strong>给形参。方法里改形参，外面的变量不变。对引用类型来说，被复制的是「地址」：能通过这个地址改对象的内容，但<strong>换不了外面变量指向谁</strong>。
+            </Concept>
+            <Concept Term="ref：传「变量本身」" Analogy="不是给复印件，而是把原件借给他：他怎么改，你的原件就怎么变。" Compare="Java 没有这个功能，JS 也没有；这是 C# 特有的。">
+                加了 <Code>ref</Code>，形参和实参成了<strong>同一个变量的两个名字</strong>。调用前变量必须已经有值，方法里可以读也可以改。交换两个数就是典型用法。
+            </Concept>
+            <Concept Term="out：专门用来「多返回一个结果」" Analogy="你交给他一个空盒子，让他把结果装进去还给你。盒子在方法里必须被装满。">
+                <Code>out</Code> 参数在调用前<strong>不需要有值</strong>，但方法返回前<strong>必须赋值</strong>。最常见的写法是 <Code>int.TryParse(text, out var n)</Code>：返回 bool 表示成不成功，数值通过 out 带出来，避免用异常控制流程。
+            </Concept>
+            <Concept Term="in：只读引用" Analogy="把原件放在玻璃柜里给他看，可以看但不能碰，也不用复印。">
+                <Code>in</Code> 传的是引用但<strong>只读</strong>，主要用来避免复制很大的 struct，提高性能。入门阶段能认识即可。
+            </Concept>
+        </ConceptGuide>
+
+
         <Card>
             <Header><Strong>演示 1：单步回放</Strong></Header>
             <ChildContent>

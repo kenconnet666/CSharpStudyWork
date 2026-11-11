@@ -16,6 +16,25 @@
         这就是<strong>字节序</strong>。
     </Intro>
     <ChildContent>
+        <ConceptGuide>
+            <Concept Term="字节序（Endianness）" Analogy="日期写成「2026-11-11」（大的在前）还是「11/11/2026」（小的在前）：信息一样，只是排列顺序约定不同。">
+                一个数如果占多个字节（比如 16 位的 <Code>0x1234</Code> 要用 2 个字节），那么<strong>哪个字节先放、哪个后放</strong>就是字节序。
+                这个顺序没有对错，只有「双方是否约定一致」。
+            </Concept>
+            <Concept Term="大端 vs 小端" Analogy="大端像我们读数字：高位（千位）先写；小端是把数字倒着写：低位先写。">
+                <strong>大端</strong>：高位字节在前，<Code>0x1234</Code> → <Code>12 34</Code>，网络协议、Modbus、西门子 S7 都用它。
+                <strong>小端</strong>：低位字节在前，<Code>0x1234</Code> → <Code>34 12</Code>，x86 / ARM 的 CPU 和 Windows 内存默认用它。
+            </Concept>
+            <Concept Term="为什么上位机里一定会遇到" Compare="Java 的 ByteBuffer 默认大端；C# 的 BitConverter 按本机（通常小端）。">
+                PLC 发过来的是大端字节，你的电脑内存是小端。如果直接把字节「当数字」读，数值就会错：<Code>12 34</Code> 被读成 <Code>0x3412</Code>。
+                收到后要按协议约定翻转，或者用 <Code>BinaryPrimitives.ReadUInt16BigEndian</Code> 这类明确指定字节序的方法。
+            </Concept>
+            <Concept Term="字序（word order）" Analogy="一个 float 占 4 字节，分成两个 16 位寄存器传：是「高寄存器在前」还是「低寄存器在前」，不同厂商不一样，要看设备手册。">
+                即使字节序对了，浮点数、32 位整数跨两个寄存器时还要处理<strong>两个字的先后顺序</strong>。常见写法记作 ABCD、CDAB、BADC、DCBA，调试时可以四种都试，看哪种解出来的数值合理。
+            </Concept>
+        </ConceptGuide>
+
+
         <Narration Mood="📅">
             打个比方：同一个日期，中国人写 <strong>2026年11月10日</strong>（从大到小，像<strong>大端</strong>），
             欧洲人写 <strong>10/11/2026</strong>（从小到大，像<strong>小端</strong>）。日期没变，写法不同，

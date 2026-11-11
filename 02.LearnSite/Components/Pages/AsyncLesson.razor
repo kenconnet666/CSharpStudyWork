@@ -15,6 +15,22 @@
         线程可以去做别的事（比如响应界面），结果好了再回来继续往下执行。写法和 JS 的 async/await 几乎一样，<Code>Task</Code> 就是 <Code>Promise</Code>。
     </Intro>
     <ChildContent>
+        <ConceptGuide>
+            <Concept Term="同步 vs 异步" Analogy="同步：你站在咖啡机前一直等，什么都不干；异步：下单后拿个号去做别的事，好了再叫你。">
+                读 PLC 要等网络往返，可能几十毫秒到几秒。如果<strong>同步等</strong>，这段时间里当前线程什么都干不了；<strong>异步等</strong>，线程可以先去做别的事。
+            </Concept>
+            <Concept Term="界面线程（UI 线程）" Analogy="窗口前唯一的一位柜员：他在帮一个人办长业务时，后面所有人（点击、拖动、重绘）都得排队，窗口看起来就是「卡死了」。">
+                WinForm / WPF / MAUI 的所有界面操作都在<strong>同一条线程</strong>上。在它上面做耗时等待，界面就会无响应。所以耗时操作必须异步。
+            </Concept>
+            <Concept Term="Task 与 await" Analogy="Task 是一张「取餐小票」，代表以后会有结果；await 是「拿着小票去坐着，餐好了再叫我继续」。" Compare="Task 相当于 JS 的 Promise，async / await 的写法和 JS 几乎一致；Java 里最接近的是 CompletableFuture。">
+                <Code>await</Code> 不会阻塞线程：遇到还没完成的任务，方法先「暂停」并把线程还给调用方，等任务完成后再从这行继续执行。写起来像同步代码，运行起来却不会卡。
+            </Concept>
+            <Concept Term="并发：Task.WhenAll" Analogy="同时派三个人去三个窗口办事，总时间取决于最慢的那一个，而不是三个的总和。">
+                读多个设备时，不要一个个 <Code>await</Code>（总时间相加），而是先启动全部任务再 <Code>await Task.WhenAll(...)</Code>（总时间取最长）。演示 1 的时间线可以直接看到差别。
+            </Concept>
+        </ConceptGuide>
+
+
         @* ---------- 演示 1：时间线 ---------- *@
         <Demo Title="演示 1：三个读设备任务的真实时间线">
             <Stage>

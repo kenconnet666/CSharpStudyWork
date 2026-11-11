@@ -13,6 +13,19 @@
         <Code>init</Code> 和 <Code>required</Code> 让配置对象"只能在创建时设置、而且必须设置"。
     </Intro>
     <ChildContent>
+        <ConceptGuide>
+            <Concept Term="字段 vs 属性" Analogy="字段像一个敞开的抽屉，谁都能直接放东西；属性像抽屉前站着一个管理员，进出都要经他检查。" Compare="Java 要手写 getXxx/setXxx，C# 的属性把它们合并成一个像字段一样用的语法。">
+                <Code>public int Age &#123; get; set; &#125;</Code> 看起来像字段，实际是方法。好处：可以在 set 里加校验（负数拒绝）、可以只读、以后改实现不影响调用方。
+            </Concept>
+            <Concept Term="record：按「内容」比较的类" Analogy="两张内容完全一样的身份证复印件：class 会说「不是同一张纸」，record 会说「内容一样，所以相等」。">
+                普通 class 的 <Code>==</Code> 比较<strong>是不是同一个对象（地址）</strong>；record 比较<strong>所有属性的值</strong>。非常适合表示「数据」：一条采样、一个配置、一个报文。
+            </Concept>
+            <Concept Term="init 与 required" Analogy="init 像合同签字：创建时可以填，签完字就不能再改；required 像必填项，漏了编译器直接不让过。">
+                <Code>init</Code> 让属性<strong>只能在创建对象时赋值</strong>，之后只读；<Code>required</Code> 要求创建时<strong>必须赋值</strong>，防止漏填字段。两者结合可以得到「不可变 + 不会漏」的数据对象。
+            </Concept>
+        </ConceptGuide>
+
+
         @* ---------- 演示 1：属性 ---------- *@
         <Demo Title="演示 1：公开字段 vs 属性（带校验）">
             <Stage>

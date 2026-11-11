@@ -1,0 +1,19 @@
+@*
+    每一课开头的"概念先导"：把本课最难理解的几个概念，用大白话 + 生活类比 + 对照 Java / JS 先讲一遍，再去玩下面的演示。
+    用法：<ConceptGuide><Concept Term="..." Analogy="..." Compare="...">解释</Concept>…</ConceptGuide>
+*@
+@namespace LearnSite.Components.Visuals
+@inherits RuneComponent
+
+<Card Variant="CardVariant.Outline">
+    <Header><IconLabel Icon="Lucide.BookOpen">先搞懂这几个概念</IconLabel></Header>
+    <ChildContent>
+        <Grid MinItemWidth="CssLength.Rem(24)" Gap="SpaceScale.Lg">
+            @ChildContent
+        </Grid>
+    </ChildContent>
+</Card>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

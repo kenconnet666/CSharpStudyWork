@@ -13,6 +13,22 @@
         "模式"可以匹配<strong>值、范围、类型、属性、列表、元组</strong>——解析协议帧、写状态机特别方便。从上往下找，<strong>第一个匹配的分支</strong>生效。
     </Intro>
     <ChildContent>
+        <ConceptGuide>
+            <Concept Term="模式匹配：按「形状」判断数据" Analogy="安检时看包的形状：长条的走这条通道，方的走那条，不用把包拆开逐件检查。" Compare="类似 Java 17+ 的 switch 模式匹配；JS 里没有对应的内置语法。">
+                <Code>if (x is int n &amp;&amp; n &gt; 0)</Code> 一句话完成「判断类型 + 取出值 + 加条件」，免去强制转换和一堆嵌套 if。
+            </Concept>
+            <Concept Term="switch 表达式" Analogy="一张对照表：左边写条件，右边写结果，整张表本身就是一个值。">
+                和传统 <Code>switch</Code> 语句不同，它<strong>有返回值</strong>，每一行是「模式 =&gt; 结果」，没有 break，也不会漏掉 default 而不自知（编译器会提醒没覆盖的情况）。
+            </Concept>
+            <Concept Term="常用的几种模式" Analogy="关系模式像「分数线」，逻辑模式像「且 / 或 / 非」，属性模式像「查某个字段」，列表模式像「看数组的前几项」。">
+                <Code>&gt;= 90</Code> 关系；<Code>&gt; 0 and &lt; 100</Code> 逻辑；<Code>&#123; Status: Online &#125;</Code> 属性；<Code>[0x01, 0x03, ..]</Code> 列表（匹配以 01 03 开头的 Modbus 帧）。
+            </Concept>
+            <Concept Term="状态机" Analogy="自动门：「关着 + 有人来 → 打开」「开着 + 没人 → 关闭」。当前状态加一个事件，决定下一个状态。">
+                用元组模式 <Code>(state, event) switch &#123; ... &#125;</Code> 可以把整个状态转换表写得一目了然，非常适合设备的运行流程。
+            </Concept>
+        </ConceptGuide>
+
+
         @* ---------- 演示 1：列表模式解析帧 ---------- *@
         <Demo Title="演示 1：用列表模式解析 Modbus 帧">
             <Stage>

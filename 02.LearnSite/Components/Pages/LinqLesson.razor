@@ -14,6 +14,22 @@
         对应关系：<Code>Where</Code> = filter，<Code>Select</Code> = map，<Code>Aggregate</Code> = reduce（Java Stream / JS 数组方法同理）。
     </Intro>
     <ChildContent>
+        <ConceptGuide>
+            <Concept Term="LINQ：对集合的「查询语言」" Analogy="工厂流水线：原料从一头进去，经过「筛选」「加工」「排序」几站，另一头出来成品。" Compare="相当于 Java 的 Stream API、JS 的 filter / map / reduce 链。">
+                把「怎么循环」交给库，你只描述「要什么」：<Code>readings.Where(r =&gt; r &gt; 50).Select(r =&gt; r * 2)</Code>。比手写 for 循环更短、更不容易出错。
+            </Concept>
+            <Concept Term="Lambda 表达式（箭头函数）" Analogy="一张便条：「拿到 x，就算出 ……」，随手写、随手递给别人用。" Compare="和 JS 的箭头函数、Java 的 lambda 几乎一样。">
+                箭头左边是参数，右边是结果。它本质是一个<strong>临时的、没有名字的方法</strong>，可以当参数传给 Where、Select 等。
+            </Concept>
+            <Concept Term="常用操作：Where / Select / OrderBy / GroupBy" Analogy="Where 是筛子，Select 是加工机，OrderBy 是排队，GroupBy 是分拣。">
+                <Code>Where</Code> 保留满足条件的；<Code>Select</Code> 把每个元素变成别的东西；<Code>GroupBy</Code> 按某个键分组后再统计（数量、平均、最大值）。
+            </Concept>
+            <Concept Term="延迟执行" Analogy="点菜单不等于上菜：写下查询只是「记下要做什么」，直到你真正遍历它（或调用 ToList），厨房才开始做。">
+                LINQ 查询在<strong>被遍历时</strong>才执行，而且<strong>每遍历一次就重新执行一次</strong>。数据源在中间被改了，结果也会不同。需要固定结果时用 <Code>ToList()</Code> 落地。演示 3 会让你看到重复执行。
+            </Concept>
+        </ConceptGuide>
+
+
         @* ---------- 演示 1：管道 ---------- *@
         <Demo Title="演示 1：数据流水线（点开关，看每一站的结果）">
             <Stage>

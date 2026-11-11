@@ -12,6 +12,23 @@
         父类要写 <Code>virtual</Code>、子类要写 <Code>override</Code>。
     </Intro>
     <ChildContent>
+        <ConceptGuide>
+            <Concept Term="继承" Analogy="「电机」是一种「设备」：设备有的（名字、开关）它都有，再加自己的特性。" Compare="和 Java 一致，用冒号代替 extends；C# 只允许继承一个类，但可以实现多个接口。">
+                子类自动拥有父类的成员，只需要写不同的部分。注意：继承表示「是一种」关系，不要为了复用代码硬继承。
+            </Concept>
+            <Concept Term="多态：virtual / override" Analogy="老板喊「开始工作」，程序员写代码、设计师画图、测试员点按钮：同一句指令，每个人按自己的方式执行。">
+                父类里标 <Code>virtual</Code>，子类用 <Code>override</Code> 重写。通过<strong>父类类型的变量</strong>调用时，实际执行的是<strong>对象真正类型</strong>的版本。
+                <strong>注意：</strong>Java 的方法默认就是可重写的，C# 默认不是，必须显式写 virtual。
+            </Concept>
+            <Concept Term="override 与 new 的区别" Analogy="override 是真正换掉了零件；new 只是在子类里另外装了一个同名零件，通过父类这个「接口面板」操作时，原来的零件还在工作。">
+                <Code>new</Code> 只是<strong>隐藏</strong>父类方法，用父类类型的变量调用时仍然执行父类的版本，很容易造成困惑，一般应避免。演示 2 会让你亲眼看到差别。
+            </Concept>
+            <Concept Term="接口与组合" Analogy="接口像「插座标准」：不管电器是什么牌子，只要插头合适就能用；调用方只认插座，不认电器。" Compare="和 Java 的 interface 一样；C# 接口也可以有默认实现。">
+                调用方依赖<strong>接口</strong>（<Code>IProtocol</Code>）而不是具体类（<Code>ModbusClient</Code>），以后换成 S7 协议，调用方一行不用改。这就是「<strong>组合优于继承</strong>」：把能力拆成可替换的零件拼在一起。
+            </Concept>
+        </ConceptGuide>
+
+
         @* ---------- 演示 1：多态 ---------- *@
         <Demo Title="演示 1：同一个变量类型，三种设备">
             <Stage>
