@@ -31,6 +31,8 @@
             </Concept>
         </ConceptGuide>
 
+        <TraceDemo Title="演示 4：一行一行看——用掩码读、置位、清位、翻转" Code="@LessonTraceCode" Steps="LessonTraceSteps" />
+
 
         <Demo Title="演示 1：拨动 8 个开关">
             <Stage>
@@ -174,4 +176,24 @@
     static string Binary(byte value) => Convert.ToString(value, 2).PadLeft(8, '0').Insert(4, "_");
 
     static string Literal(byte value) => $"0b{Binary(value)}";
+    // ---- 逐行执行演示 ----
+    const string LessonTraceCode = """
+        byte status = 0b0000_0101;
+        bool bit2 = (status & 0b0000_0100) != 0;   // 读：第 2 位是不是 1
+        status |= 0b0000_1000;                     // 置位：把第 3 位变成 1
+        status &= 0b1111_1110;                     // 清位：把第 0 位变成 0
+        status ^= 0b0000_0010;                     // 翻转：第 1 位取反
+        Console.WriteLine(Convert.ToString(status, 2).PadLeft(8, '0'));
+        """;
+
+    static readonly IReadOnlyList<TraceDemo.TraceStep> LessonTraceSteps =
+    [
+        new("开始", "", [], "🏁", "先看右边的变量，下面五行代码依次执行。我们用一个「状态字节」当例子，每一位是一个开关。"),
+        new("声明状态字节", "1", [], "📦", "<code>0b</code> 开头表示二进制写法。<code>status</code> = <code>0000 0101</code>：第 0 位和第 2 位是 1（比如过热、离线两个报警亮着）。", [("status", "0000 0101（5）")]),
+        new("读：用 &amp; 掩码", "2", [], "🔍", "<code>status &amp; 0b0000_0100</code>：掩码只有第 2 位是 1，其余被清成 0。<code>0101 &amp; 0100 = 0100</code>，不等于 0，所以第 2 位<strong>是 1</strong>，<code>bit2</code> 为 true。", [("status", "0000 0101（5）"), ("status & 掩码", "0000 0100"), ("bit2", "True")]),
+        new("置位：用 | 掩码", "3", [], "✏", "<code>|=</code> 是「或」：掩码里是 1 的位强制变成 1，别的位不动。<code>0101 | 1000 = 1101</code>，第 3 位被点亮。", [("status", "0000 1101（13）")]),
+        new("清位：用 &amp; ~掩码", "4", [], "🧹", "<code>0b1111_1110</code> 是「除了第 0 位全是 1」。和它做 <code>&amp;</code>：第 0 位被清成 0，其余位保持原样。<code>1101 &amp; 1110 = 1100</code>。", [("status", "0000 1100（12）")]),
+        new("翻转：用 ^ 掩码", "5", [], "🔄", "<code>^=</code> 是「异或」：掩码里是 1 的位<strong>取反</strong>（0 变 1、1 变 0）。第 1 位原来是 0，变成 1：<code>1100 ^ 0010 = 1110</code>。", [("status", "0000 1110（14）")]),
+        new("输出二进制", "6", ["00001110"], "✅", "<code>Convert.ToString(status, 2)</code> 转成二进制文本，<code>PadLeft(8, '0')</code> 左边补 0 到 8 位：<strong>00001110</strong>。四种操作的口诀：读用 &amp;，置位用 |，清位用 &amp; ~，翻转用 ^。", [("status", "0000 1110（14）")]),
+    ];
 }

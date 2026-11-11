@@ -34,6 +34,8 @@
             </Concept>
         </ConceptGuide>
 
+        <TraceDemo Title="演示 3：一行一行看——为什么直接读会读反" Code="@LessonTraceCode" Steps="LessonTraceSteps" />
+
 
         <Narration Mood="📅">
             打个比方：同一个日期，中国人写 <strong>2026年11月10日</strong>（从大到小，像<strong>大端</strong>），
@@ -195,4 +197,20 @@
             BinaryPrimitives.WriteUInt32LittleEndian(Little, value);
         }
     }
+    // ---- 逐行执行演示 ----
+    const string LessonTraceCode = """
+        byte[] frame = [0x12, 0x34];                              // 收到的两个字节（大端：高位在前）
+        ushort wrong = BitConverter.ToUInt16(frame);              // 按本机字节序（小端）直接读
+        ushort right = (ushort)((frame[0] << 8) | frame[1]);      // 手动按大端拼
+        Console.WriteLine($"{wrong:X4} {right:X4}");
+        """;
+
+    static readonly IReadOnlyList<TraceDemo.TraceStep> LessonTraceSteps =
+    [
+        new("开始", "", [], "🏁", "PLC 发来两个字节 <code>12 34</code>，按协议它们应该拼成 <code>0x1234</code>。看看两种读法的差别。"),
+        new("收到两个字节", "1", [], "📦", "数组下标 0 放 <code>0x12</code>，下标 1 放 <code>0x34</code>。按大端约定，<strong>先到的 0x12 是高位字节</strong>。", [("frame[0]", "0x12"), ("frame[1]", "0x34")]),
+        new("直接用 BitConverter 读", "2", [], "💥", "<code>BitConverter</code> 按<strong>本机字节序</strong>读，Windows 电脑是小端：认为<strong>先到的是低位</strong>，拼成 <code>0x3412</code>——读反了！这就是「数值莫名其妙是另一个数」的根源。", [("wrong", "0x3412 = 13330")]),
+        new("手动按大端拼", "3", [], "🧮", "<code>frame[0] &lt;&lt; 8</code>：把 <code>0x12</code> 左移 8 位变成 <code>0x1200</code>；再 <code>| frame[1]</code> 把 <code>0x34</code> 放进低 8 位，得到 <code>0x1234</code>。", [("frame[0] << 8", "0x1200"), ("| frame[1]", "0x1234"), ("right", "0x1234 = 4660")]),
+        new("对比输出", "4", ["3412 1234"], "✅", "两个结果不同。写上位机时<strong>永远显式指定字节序</strong>：手动移位拼，或用 <code>BinaryPrimitives.ReadUInt16BigEndian</code>，不要依赖本机默认。", [("wrong", "3412"), ("right", "1234")]),
+    ];
 }

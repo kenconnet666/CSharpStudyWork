@@ -28,6 +28,8 @@
             </Concept>
         </ConceptGuide>
 
+        <TraceDemo Title="演示 5：一行一行看——switch 表达式怎么从上往下匹配一帧数据" Code="@LessonTraceCode" Steps="LessonTraceSteps" />
+
 
         @* ---------- 演示 1：列表模式解析帧 ---------- *@
         <Demo Title="演示 1：用列表模式解析 Modbus 帧">
@@ -289,4 +291,28 @@
             _ => state,
         };
         """;
+    // ---- 逐行执行演示 ----
+    const string LessonTraceCode = """
+        string Describe(byte[] frame) => frame switch
+        {
+            [] => "空帧",
+            [var unit, 0x03, ..] => $"站{unit} 读寄存器",
+            [var unit, 0x06, ..] => $"站{unit} 写寄存器",
+            [_, var fc, ..] when fc >= 0x80 => $"异常 {fc:X2}",
+            _ => "未知",
+        };
+
+        Console.WriteLine(Describe([0x01, 0x83, 0x02]));
+        """;
+
+    static readonly IReadOnlyList<TraceDemo.TraceStep> LessonTraceSteps =
+    [
+        new("开始", "", [], "🏁", "输入一帧 <code>01 83 02</code>（从站 1 回了一个异常应答）。<code>switch</code> 表达式会<strong>从上到下</strong>逐个尝试，第一个匹配的就是结果。"),
+        new("调用", "10", [], "📞", "把字节数组传进去，<code>frame</code> 就是 <code>[0x01, 0x83, 0x02]</code>。", [("frame", "01 83 02")]),
+        new("尝试第 1 行：空数组？", "3", [], "🔎", "<code>[]</code> 要求数组是空的。长度是 3，<strong>不匹配</strong>，继续下一行。", [("frame", "01 83 02")]),
+        new("尝试第 2 行：读寄存器？", "4", [], "🔎", "<code>[var unit, 0x03, ..]</code>：第 1 个元素取出来叫 unit，<strong>第 2 个必须是 0x03</strong>，后面随便。第 2 个元素是 0x83，不匹配。", [("unit（试取）", "0x01"), ("第 2 个元素", "0x83 ≠ 0x03")]),
+        new("尝试第 3 行：写寄存器？", "5", [], "🔎", "同理，第 2 个元素要是 0x06，还是不匹配。", [("第 2 个元素", "0x83 ≠ 0x06")]),
+        new("第 4 行：形状匹配，再看 when", "6", [], "🎯", "<code>[_, var fc, ..]</code> 只要求至少两个元素，第 2 个取名 fc = 0x83，形状匹配；再检查 <code>when fc &gt;= 0x80</code>：0x83 ≥ 0x80 成立。<strong>两个条件都满足，匹配成功</strong>。", [("fc", "0x83"), ("when fc >= 0x80", "True")]),
+        new("得到结果", "10", ["异常 83"], "✅", "返回 <code>$\"异常 {fc:X2}\"</code> = 「异常 83」。这正是 Modbus 的规则：功能码最高位为 1 表示异常应答。<strong>不用写一堆 if 和下标判断，一眼就能看出每种帧的样子。</strong>", [("结果", "异常 83")]),
+    ];
 }

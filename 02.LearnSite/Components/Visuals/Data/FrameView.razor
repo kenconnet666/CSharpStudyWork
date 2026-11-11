@@ -16,7 +16,7 @@
         <Flex Gap="SpaceScale.Sm" Wrap="true">
             @foreach (var (field, i) in Fields.Select((f, i) => (f, i)))
             {
-                <Slot @key="@($"{i}{field.Name}{LoopbackTcp.Hex(field.Bytes)}")" Name="@field.Name" Data="@LoopbackTcp.Hex(field.Bytes)" Changed="@Highlight" />
+                <Slot @key="@($"{i}{field.Name}{ByteText.Hex(field.Bytes)}")" Name="@field.Name" Data="@ByteText.Hex(field.Bytes)" Changed="@Highlight" />
             }
         </Flex>
         <Flex Direction="LayoutDirection.Column" Gap="SpaceScale.Xs">

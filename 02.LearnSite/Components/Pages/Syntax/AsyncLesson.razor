@@ -30,6 +30,8 @@
             </Concept>
         </ConceptGuide>
 
+        <TraceDemo Title="演示 3：一行一行看——await 到底「等」在哪里" Code="@LessonTraceCode" Steps="LessonTraceSteps" />
+
 
         @* ---------- 演示 1：时间线 ---------- *@
         <Demo Title="演示 1：三个读设备任务的真实时间线">
@@ -348,4 +350,27 @@
         cts?.Cancel();
         cts?.Dispose();
     }
+    // ---- 逐行执行演示 ----
+    const string LessonTraceCode = """
+        async Task ShowAsync()
+        {
+            Console.WriteLine("1 发出读取请求");
+            var value = await ReadAsync();               // 设备要 500 毫秒才回
+            Console.WriteLine($"3 拿到 {value}");
+        }
+
+        ShowAsync();
+        Console.WriteLine("2 界面继续响应");
+        """;
+
+    static readonly IReadOnlyList<TraceDemo.TraceStep> LessonTraceSteps =
+    [
+        new("开始", "", [], "🏁", "注意输出里的编号：<strong>代码的先后顺序和输出的先后顺序并不一样</strong>，这正是 await 的效果。"),
+        new("调用 ShowAsync", "8", [], "📞", "调用异步方法，从它的第一行开始同步执行。"),
+        new("发出请求", "3", ["1 发出读取请求"], "▶", "先输出第 1 条，还没有任何等待。"),
+        new("遇到 await", "4", ["1 发出读取请求"], "⏸", "<code>ReadAsync()</code> 发出请求后<strong>还没完成</strong>。<code>await</code> 在这里<strong>暂停这个方法，把线程还给调用方</strong>——不是让线程在原地傻等。", [("ReadAsync", "进行中（500 毫秒）")]),
+        new("回到调用方继续", "9", ["1 发出读取请求", "2 界面继续响应"], "💡", "<code>ShowAsync()</code> 立刻返回了，调用方接着执行下一行，输出「界面继续响应」。如果这是界面线程，此刻界面<strong>没有被卡住</strong>，还能响应点击。", [("ReadAsync", "进行中（500 毫秒）")]),
+        new("500 毫秒后：设备回复", "4", ["1 发出读取请求", "2 界面继续响应"], "📬", "数据到了，之前暂停的方法从 <code>await</code> 这一行<strong>接着往下执行</strong>，<code>value</code> 得到结果。", [("value", "25.3")]),
+        new("继续执行后半段", "5", ["1 发出读取请求", "2 界面继续响应", "3 拿到 25.3"], "✅", "输出第 3 条。写起来像同步代码从上到下，实际执行时被 await 切成两段：<strong>前半段立刻执行，后半段等数据到了再执行</strong>。", [("value", "25.3")]),
+    ];
 }

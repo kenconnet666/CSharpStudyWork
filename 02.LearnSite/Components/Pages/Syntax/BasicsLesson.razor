@@ -30,6 +30,8 @@
             </Concept>
         </ConceptGuide>
 
+        <TraceDemo Title="演示 5：一行一行看——除法、溢出、null 的结果为什么是这样" Code="@LessonTraceCode" Steps="LessonTraceSteps" />
+
 
         @* ---------- 演示 1：类型与 var ---------- *@
         <Demo Title="演示 1：基本类型与 var 推断">
@@ -296,4 +298,28 @@
                 $"var (min, max) = MinMax(slice);   // {minMax}");
         }
     }
+    // ---- 逐行执行演示 ----
+    const string LessonTraceCode = """
+        int a = 7, b = 2;
+        int q = a / b;                       // 整数除整数
+        double d = (double)a / b;            // 先转成 double 再除
+        byte small = 250;
+        small += 10;                         // byte 装不下 260
+        string? name = null;
+        int len = name?.Length ?? -1;       // null 安全
+        Console.WriteLine($"{q} {d} {small} {len}");
+        """;
+
+    static readonly IReadOnlyList<TraceDemo.TraceStep> LessonTraceSteps =
+    [
+        new("开始", "", [], "🏁", "五个很容易算错的小结果，一行行看原因。"),
+        new("两个整数", "1", [], "📦", "<code>a</code> 和 <code>b</code> 都是 <code>int</code>。", [("a", "7"), ("b", "2")]),
+        new("整数除法", "2", [], "🧮", "<strong>整数 / 整数 = 整数</strong>，小数部分直接丢掉：7 / 2 = <strong>3</strong>，不是 3.5。写上位机算比例时最常见的坑。", [("q", "3")]),
+        new("先转 double", "3", [], "🔬", "<code>(double)a</code> 把 7 变成 7.0，再除以 2，是浮点除法：<strong>3.5</strong>。只要有一边是 double，结果就是 double。", [("q", "3"), ("d", "3.5")]),
+        new("byte 的范围", "4", [], "📏", "<code>byte</code> 只能装 0~255，250 在范围内。", [("small", "250")]),
+        new("溢出回绕", "5", [], "💥", "250 + 10 = 260，超过 255。C# 默认<strong>不检查溢出</strong>，高位被丢掉：260 − 256 = <strong>4</strong>。要报错需要写 <code>checked</code>。累加计数器、校验和时要特别注意。", [("small", "4（溢出回绕）")]),
+        new("null 字符串", "6", [], "🫥", "<code>string?</code> 表示「可以为 null」，现在 <code>name</code> 是 null：没有指向任何字符串。", [("name", "null")]),
+        new("?. 与 ??", "7", [], "🛡", "<code>name?.Length</code>：name 是 null，整个表达式得 null（不抛 NullReferenceException）；<code>?? -1</code>：为 null 就用 −1。", [("name?.Length", "null"), ("len", "-1")]),
+        new("输出", "8", ["3 3.5 4 -1"], "✅", "整数除法丢小数、byte 溢出回绕、null 安全访问，三个结果都和直觉不完全一样，写代码时要心里有数。", [("q", "3"), ("d", "3.5"), ("small", "4"), ("len", "-1")]),
+    ];
 }

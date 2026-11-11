@@ -58,7 +58,7 @@
                 <Grid MinItemWidth="CssLength.Rem(12)" Gap="SpaceScale.Sm">
                     <Readout Title="PLC 地址写法" Value="@Address" />
                     <Readout Title="读取多少字节" Value="@(typeKey == "X" ? "1 字节中的 1 位" : $"{Size} 字节")" />
-                    <Readout Title="原始字节" Value="@LoopbackTcp.Hex(Raw)" />
+                    <Readout Title="原始字节" Value="@ByteText.Hex(Raw)" />
                     <Readout Title="解析成数值" Value="@Value" />
                 </Grid>
                 <Narration @key="@($"{typeKey}{Off}{bit}")" Mood="🧭">@Explain</Narration>

@@ -29,6 +29,8 @@
             </Concept>
         </ConceptGuide>
 
+        <TraceDemo Title="演示：一行一行看——赋值到底复制了什么" Code="@LessonTraceCode" Steps="LessonTraceSteps" />
+
 
         <Narration Mood="📄">
             打个比方：<strong>值类型 = 复印一份文件</strong>，你在复印件上涂改，原件不受影响；
@@ -140,4 +142,31 @@
     readonly List<string> log = [];
 
     string Code => string.Join("\n", ["var s1 = new PointStruct { X = 1 };", "var c1 = new PointClass { X = 1 };", .. log]);
+    // ---- 逐行执行演示 ----
+    const string LessonTraceCode = """
+        struct Point { public int X; }
+        class Device { public int Id; }
+
+        var p1 = new Point { X = 1 };
+        var p2 = p1;                 // 值类型：复制一份
+        p2.X = 99;
+
+        var a = new Device { Id = 1 };
+        var b = a;                   // 引用类型：只复制「地址」
+        b.Id = 99;
+
+        Console.WriteLine($"{p1.X} {a.Id}");
+        """;
+
+    static readonly IReadOnlyList<TraceDemo.TraceStep> LessonTraceSteps =
+    [
+        new("开始", "", [], "🏁", "代码里定义了一个值类型 <code>struct Point</code> 和一个引用类型 <code>class Device</code>，各演示一遍「赋值再修改」。"),
+        new("创建 p1", "4", [], "📦", "<code>p1</code> 是值类型，变量里<strong>直接装着数据</strong> X = 1。", [("p1", "X = 1")]),
+        new("p2 = p1：复制一份", "5", [], "🔁", "值类型赋值会<strong>复制整个数据</strong>。现在有<strong>两份独立的</strong> Point，互不相干。", [("p1", "X = 1"), ("p2", "X = 1（复印件）")]),
+        new("修改 p2", "6", [], "✏", "只改了 p2 那一份。p1 还是 1。", [("p1", "X = 1"), ("p2", "X = 99")]),
+        new("创建 a", "8", [], "📦", "<code>a</code> 是引用类型：对象放在堆里，变量里装的是指向它的<strong>地址</strong>（图中用 → 表示）。", [("a", "→ 对象 #1（Id = 1）")]),
+        new("b = a：只复制地址", "9", [], "🔗", "引用类型赋值只复制<strong>地址</strong>，没有新对象。<code>a</code> 和 <code>b</code> 指向<strong>同一个</strong>对象。", [("a", "→ 对象 #1（Id = 1）"), ("b", "→ 对象 #1（同一个）")]),
+        new("通过 b 修改", "10", [], "💥", "改的是 b 指向的那个对象，而 a 指向的也是它，所以<strong>a.Id 也变成了 99</strong>。", [("a", "→ 对象 #1（Id = 99）"), ("b", "→ 对象 #1（同一个）")]),
+        new("输出", "12", ["1 99"], "✅", "p1.X 仍是 1（复制的），a.Id 变成 99（共享的）。记住：<strong>struct 赋值像复印，class 赋值像发链接</strong>。", [("p1.X", "1"), ("a.Id", "99")]),
+    ];
 }

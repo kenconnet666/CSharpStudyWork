@@ -29,6 +29,8 @@
             </Concept>
         </ConceptGuide>
 
+        <TraceDemo Title="演示 4：一行一行看——查询什么时候真正执行" Code="@LessonTraceCode" Steps="LessonTraceSteps" />
+
 
         @* ---------- 演示 1：管道 ---------- *@
         <Demo Title="演示 1：数据流水线（点开关，看每一站的结果）">
@@ -294,4 +296,26 @@
     }
 
     string LazyCode => "var query = orders.Where(o => o.Qty > 1);   // 只是定义，没有执行\n" + string.Join("\n", lazyLog.TakeLast(8));
+    // ---- 逐行执行演示 ----
+    const string LessonTraceCode = """
+        int[] data = [5, 12, 8, 20];
+        var query = data.Where(x => x > 6)
+                        .Select(x => x * 2);       // 只是「记下」要做什么
+        data[0] = 30;                              // 查询还没执行，先改了数据
+        foreach (var v in query)                   // 这里才开始真正执行
+            Console.WriteLine(v);
+        """;
+
+    static readonly IReadOnlyList<TraceDemo.TraceStep> LessonTraceSteps =
+    [
+        new("开始", "", [], "🏁", "LINQ 的关键是<strong>延迟执行</strong>：写下查询 ≠ 执行查询。"),
+        new("准备数据", "1", [], "📦", "原始数据四个数。", [("data", "[5, 12, 8, 20]")]),
+        new("定义查询", "2-3", [], "📝", "<code>Where</code> 和 <code>Select</code> 此时<strong>一个元素都没处理</strong>，只是把「先筛选 &gt; 6，再乘 2」这个计划存进 <code>query</code>。控制台没有任何输出，也没有任何计算发生。", [("data", "[5, 12, 8, 20]"), ("query", "（只是一个计划）")]),
+        new("在执行前改了数据", "4", [], "💡", "把 <code>data[0]</code> 改成 30。因为查询还没跑，<strong>它之后看到的是新数据</strong>。如果 LINQ 是立即执行的，这行就不会影响结果。", [("data", "[30, 12, 8, 20]"), ("query", "（还是计划）")]),
+        new("foreach 开始：取第 1 个", "5,6", [], "▶", "<code>foreach</code> 要第一个元素，查询才启动：30 → Where：30 &gt; 6 通过 → Select：30 × 2 = <strong>60</strong> → 输出。", [("当前元素", "30"), ("v", "60")]),
+        new("取第 2 个", "5,6", ["60"], "▶", "12 → 通过 → <strong>24</strong>。每次只处理一个，处理完一个才取下一个（流水线，不是一站站批量做）。", [("当前元素", "12"), ("v", "24")]),
+        new("取第 3 个", "5,6", ["60", "24"], "▶", "8 → 8 &gt; 6 通过 → <strong>16</strong>。", [("当前元素", "8"), ("v", "16")]),
+        new("取第 4 个", "5,6", ["60", "24", "16"], "▶", "20 → 通过 → <strong>40</strong>。如果某个元素不满足条件（比如 5），它在 Where 就被丢掉，根本到不了 Select。", [("当前元素", "20"), ("v", "40")]),
+        new("结束", "", ["60", "24", "16", "40"], "✅", "结果 60、24、16、40：注意第一个是 <strong>60 而不是 10</strong>——因为查询在 foreach 才执行，用到的是改过的 30。需要「把当时的结果固定下来」就在定义处加 <code>.ToList()</code>。"),
+    ];
 }

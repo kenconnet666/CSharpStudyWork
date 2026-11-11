@@ -51,9 +51,10 @@
 
 ## 新增一课
 
-1. 在 `Components/Pages/` 里新建一个带 `@page "/路径"` 的 `.razor` 页面。
-2. 在 `Components/LessonNav.razor` 里加一项导航。
-3. 演示里反复用到的小部件放在 `Components/Visuals/`（现有：`BitRow` 位格、`ByteCells` 字节格、`Slot` 变量/对象盒子、`Readout` 读数）。
+1. 在 `Components/Pages/` 对应的分组里新建一个带 `@page "/路径"` 的 `.razor` 页面：`Foundations/`（看见底层）、`Syntax/`（语法精讲）、`Communication/`（通信）。
+2. 在 `Components/Layout/LessonNav.razor` 里加一项导航。
+3. 通用部件放在 `Components/Visuals/`：`Teaching/`（`LessonPage`、`Demo`、`TraceDemo` 逐行执行、`ConceptGuide`/`Concept` 概念讲解、`Narration`、`Quiz`）、`Data/`（`Slot` 变量盒子、`Readout` 读数、`BitRow`、`ByteCells`、`FrameView` 报文字段）、`Animation/`（`ParamFlow`、`EventStage`、`WireDemo`、`RefDiagram`）。
+4. 真实的本机 TCP 和 Modbus 模拟设备在 `Services/`（`LoopbackServer` 是公共基类）。
 
 页面里显示的数字都是 C# 当场计算出来的，不是写死的动画。
 

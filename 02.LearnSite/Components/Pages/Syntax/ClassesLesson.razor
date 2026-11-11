@@ -25,6 +25,8 @@
             </Concept>
         </ConceptGuide>
 
+        <TraceDemo Title="演示 4：一行一行看——给属性赋值时，set 里发生了什么" Code="@LessonTraceCode" Steps="LessonTraceSteps" />
+
 
         @* ---------- 演示 1：属性 ---------- *@
         <Demo Title="演示 1：公开字段 vs 属性（带校验）">
@@ -242,4 +244,33 @@
             ? $"var opts = new ConnectionOptions {{ Host = \"192.168.0.10\"{(optionActions.Contains("port") ? ", Port = 503" : "")} }};"
             : $"var opts = new ConnectionOptions {{ {(optionActions.Contains("port") ? "Port = 503" : "")} }};   // 没写 Host",
         optionActions.Contains("reassign") ? "opts.Port = 504;   // 创建之后再改" : "");
+    // ---- 逐行执行演示 ----
+    const string LessonTraceCode = """
+        class Motor
+        {
+            public int Speed
+            {
+                get;
+                set => field = Math.Clamp(value, 0, 3000);   // 限制在 0~3000
+            }
+        }
+
+        var m = new Motor();
+        m.Speed = 5000;
+        Console.WriteLine(m.Speed);
+        m.Speed = -10;
+        Console.WriteLine(m.Speed);
+        """;
+
+    static readonly IReadOnlyList<TraceDemo.TraceStep> LessonTraceSteps =
+    [
+        new("开始", "", [], "🏁", "<code>Motor</code> 的 <code>Speed</code> 是属性：赋值不是直接写入，而是先经过 <code>set</code> 里的校验。"),
+        new("创建对象", "10", [], "📦", "<code>new Motor()</code> 创建对象，隐藏字段 <code>field</code> 默认是 0。", [("m.Speed", "0")]),
+        new("赋值 5000：进入 set", "11,6", [], "📞", "<code>m.Speed = 5000</code> 看起来像写字段，其实是调用 <code>set</code>，此时 <code>value</code> = 5000。", [("value", "5000"), ("m.Speed", "0")]),
+        new("Clamp 限幅", "6", [], "🧮", "<code>Math.Clamp(5000, 0, 3000)</code>：超过上限，取上限 <strong>3000</strong>，写入隐藏字段。这样<strong>外面不可能把电机设成超速</strong>。", [("value", "5000"), ("field", "3000")]),
+        new("读取 get", "12", ["3000"], "✅", "<code>get;</code> 返回隐藏字段：输出 3000，不是 5000。", [("m.Speed", "3000")]),
+        new("赋值 -10", "13,6", ["3000"], "📞", "再次进入 <code>set</code>，<code>value</code> = −10，低于下限。", [("value", "-10"), ("m.Speed", "3000")]),
+        new("Clamp 取下限", "6", ["3000"], "🧮", "<code>Math.Clamp(-10, 0, 3000)</code> 取下限 <strong>0</strong>。", [("value", "-10"), ("field", "0")]),
+        new("再读", "14", ["3000", "0"], "✅", "输出 0。属性的价值就在这里：<strong>数据永远经过检查才能进来</strong>，而调用方写法不变。如果用公开字段，这个保护就没有了。", [("m.Speed", "0")]),
+    ];
 }

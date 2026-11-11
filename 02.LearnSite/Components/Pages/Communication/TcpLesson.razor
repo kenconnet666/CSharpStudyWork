@@ -34,7 +34,7 @@
                 <Flex Gap="SpaceScale.Sm" Wrap="true">
                     <Button Icon="Lucide.Send" Disabled="@(!connected)" @onclick="Send">发送</Button>
                 </Flex>
-                <Paragraph Tone="TextTone.Muted">将要发送的字节：<Code>@LoopbackTcp.Hex(Encoding.UTF8.GetBytes(text))</Code></Paragraph>
+                <Paragraph Tone="TextTone.Muted">将要发送的字节：<Code>@ByteText.Hex(Encoding.UTF8.GetBytes(text))</Code></Paragraph>
             </Stage>
             <Side>
                 <IconLabel Icon="Lucide.Terminal">通信记录</IconLabel>
@@ -72,7 +72,7 @@
                 <Flex Gap="SpaceScale.Sm" Wrap="true">
                     @foreach (var (chunk, i) in Chunks.Select((c, i) => (c, i)))
                     {
-                        <Slot @key="@($"{chunkSize}{i}")" Name="@($"第 {i + 1} 块")" Data="@LoopbackTcp.Hex(chunk)" />
+                        <Slot @key="@($"{chunkSize}{i}")" Name="@($"第 {i + 1} 块")" Data="@ByteText.Hex(chunk)" />
                     }
                 </Flex>
             </Stage>
@@ -148,11 +148,11 @@
     async Task Send()
     {
         var data = Encoding.UTF8.GetBytes(text);
-        log.Add($"[客户端] 发送 {data.Length} 字节：{LoopbackTcp.Hex(data)}");
+        log.Add($"[客户端] 发送 {data.Length} 字节：{ByteText.Hex(data)}");
         try
         {
             var reply = await tcp.SendAsync(data);
-            log.Add($"[客户端] 收到 {reply.Length} 字节：{LoopbackTcp.Hex(reply)}  =  \"{Encoding.UTF8.GetString(reply)}\"");
+            log.Add($"[客户端] 收到 {reply.Length} 字节：{ByteText.Hex(reply)}  =  \"{Encoding.UTF8.GetString(reply)}\"");
         }
         catch (Exception ex) when (ex is OperationCanceledException or IOException)
         {

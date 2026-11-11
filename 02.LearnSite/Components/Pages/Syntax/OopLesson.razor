@@ -28,6 +28,8 @@
             </Concept>
         </ConceptGuide>
 
+        <TraceDemo Title="演示 4：一行一行看——同一行 d.Describe()，为什么执行不同的方法" Code="@LessonTraceCode" Steps="LessonTraceSteps" />
+
 
         @* ---------- 演示 1：多态 ---------- *@
         <Demo Title="演示 1：同一个变量类型，三种设备">
@@ -272,4 +274,32 @@
         "",
         $"var service = new PollingService(new {CurrentClient.GetType().Name}());   // 换这一行，其余不动",
         $"foreach (var line in service.Poll({string.Join(", ", Enumerable.Range(1, addressCount))})) Console.WriteLine(line);");
+    // ---- 逐行执行演示 ----
+    const string LessonTraceCode = """
+        class Device
+        {
+            public virtual string Describe() => "通用设备";
+        }
+        class Motor : Device
+        {
+            public override string Describe() => "电机";
+        }
+        class Valve : Device { }
+
+        Device[] all = [new Motor(), new Valve(), new Device()];
+        foreach (var d in all)
+            Console.WriteLine(d.Describe());
+        """;
+
+    static readonly IReadOnlyList<TraceDemo.TraceStep> LessonTraceSteps =
+    [
+        new("开始", "", [], "🏁", "数组的类型是 <code>Device[]</code>，但里面放的是三种不同的对象。关键：<strong>变量的类型</strong>和<strong>对象真正的类型</strong>可以不同。"),
+        new("创建数组", "11", [], "📦", "三个元素的<strong>变量类型</strong>都是 Device，<strong>真实类型</strong>分别是 Motor、Valve、Device。", [("all[0]", "真实类型 Motor"), ("all[1]", "真实类型 Valve"), ("all[2]", "真实类型 Device")]),
+        new("第 1 圈：d 是 Motor", "12,7", [], "🎯", "编译器只知道 d 是 Device，但运行时会<strong>查对象真正的类型</strong>：Motor 重写（<code>override</code>）了 Describe，于是执行 Motor 的版本。", [("d", "Motor")]),
+        new("输出", "13", ["电机"], "✅", "输出「电机」。", [("d", "Motor")]),
+        new("第 2 圈：d 是 Valve", "12,3", ["电机"], "🎯", "Valve <strong>没有重写</strong> Describe，沿着继承链往上找，找到父类 Device 里的版本。", [("d", "Valve")]),
+        new("输出", "13", ["电机", "通用设备"], "✅", "输出「通用设备」。", [("d", "Valve")]),
+        new("第 3 圈：d 是 Device", "12,3", ["电机", "通用设备"], "🎯", "对象本身就是 Device，当然执行 Device 的版本。", [("d", "Device")]),
+        new("输出", "13", ["电机", "通用设备", "通用设备"], "✅", "这就是<strong>多态</strong>：调用方只写一行 <code>d.Describe()</code>，具体执行谁的版本由对象的真实类型决定。上位机里可以统一处理「各种设备」，新增设备类型不用改调用方。", [("d", "Device")]),
+    ];
 }

@@ -1,59 +1,33 @@
 using System.Buffers.Binary;
-using System.Net;
 using System.Net.Sockets;
 
 namespace LearnSite.Services;
 
 /// <summary>
-/// 本机回环上的 Modbus TCP 从站（模拟设备）+ 主站客户端。走真实的 TCP，
-/// 收帧时先读 7 字节头、再按头里的"长度"读剩下的——这就是上一课讲的"分帧"。
+/// 本机回环上的 Modbus TCP 从站（模拟设备）+ 主站客户端。
+/// 收帧时先读 7 字节头、再按头里的"长度"读剩下的——这就是 TCP 一课讲的"分帧"。
 /// </summary>
-public sealed class ModbusLoopback : IDisposable
+public sealed class ModbusLoopback : LoopbackServer
 {
-    readonly TcpListener listener = new(IPAddress.Loopback, 0);
-    readonly CancellationTokenSource cts = new();
-    TcpClient? client;
     ushort transactionId;
 
     public ModbusDevice Device { get; } = new();
 
-    public int Port => ((IPEndPoint)listener.LocalEndpoint).Port;
+    public ushort NextTransactionId() => ++transactionId;
 
-    public bool Connected => client?.Connected == true;
-
-    public void StartServer()
+    protected override async Task ServeAsync(NetworkStream stream, CancellationToken token)
     {
-        listener.Start();
-        _ = AcceptLoop(cts.Token);
+        while (await ReadFrameAsync(stream, token) is { } request)
+            await stream.WriteAsync(Device.Handle(request), token);
     }
 
-    async Task AcceptLoop(CancellationToken token)
+    /// <summary>发出一帧请求并等待应答（超时 2 秒）。</summary>
+    public async Task<byte[]> RequestAsync(byte[] request)
     {
-        try
-        {
-            while (!token.IsCancellationRequested)
-                _ = Serve(await listener.AcceptTcpClientAsync(token), token);
-        }
-        catch (OperationCanceledException) { }
-        catch (ObjectDisposedException) { }
-    }
-
-    async Task Serve(TcpClient peer, CancellationToken token)
-    {
-        using (peer)
-        {
-            var stream = peer.GetStream();
-            try
-            {
-                while (true)
-                {
-                    var request = await ReadFrameAsync(stream, token);
-                    if (request is null) break;
-                    await stream.WriteAsync(Device.Handle(request), token);
-                }
-            }
-            catch (Exception ex) when (ex is OperationCanceledException or IOException) { }
-        }
+        var stream = ClientStream;
+        await stream.WriteAsync(request);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        return await ReadFrameAsync(stream, timeout.Token) ?? throw new IOException("对方关闭了连接");
     }
 
     /// <summary>读一整帧：先 7 字节头，再按头里的长度字段读剩余字节。对方关闭连接返回 null。</summary>
@@ -77,36 +51,5 @@ public sealed class ModbusLoopback : IDisposable
             filled += count;
         }
         return true;
-    }
-
-    public async Task ConnectAsync()
-    {
-        client = new TcpClient();
-        await client.ConnectAsync(IPAddress.Loopback, Port);
-    }
-
-    public ushort NextTransactionId() => ++transactionId;
-
-    /// <summary>发出一帧请求并等待应答（超时 2 秒）。</summary>
-    public async Task<byte[]> RequestAsync(byte[] request)
-    {
-        var stream = client?.GetStream() ?? throw new InvalidOperationException("还没有连接");
-        await stream.WriteAsync(request);
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-        return await ReadFrameAsync(stream, timeout.Token) ?? throw new IOException("对方关闭了连接");
-    }
-
-    public void Disconnect()
-    {
-        client?.Dispose();
-        client = null;
-    }
-
-    public void Dispose()
-    {
-        cts.Cancel();
-        Disconnect();
-        listener.Stop();
-        cts.Dispose();
     }
 }

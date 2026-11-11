@@ -35,7 +35,7 @@
                 <Field Label="@($"起始地址 {address}")"><Slider TValue="int" @bind-Value="address" Min="0" Max="200" /></Field>
                 <Field Label="@(functionKey == "6" ? $"写入值 {value}" : $"读取数量 {value}")"><Slider TValue="int" @bind-Value="value" Min="1" Max="125" /></Field>
                 <Grid MinItemWidth="CssLength.Rem(12)" Gap="SpaceScale.Sm">
-                    <Readout Title="整帧（8 字节）" Value="@LoopbackTcp.Hex(Frame)" />
+                    <Readout Title="整帧（8 字节）" Value="@ByteText.Hex(Frame)" />
                     <Readout Title="CRC16 数值" Value="@($"0x{Crc:X4}")" />
                     <Readout Title="线上顺序" Value="@($"{Crc & 0xFF:X2} {Crc >> 8:X2}（低字节在前）")" />
                 </Grid>
