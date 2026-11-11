@@ -30,9 +30,9 @@
         <!-- 两个 MAUI 包的版本要与本机装的 maui-windows 工作负载一致（dotnet workload list） -->
         <PackageReference Include="Microsoft.Maui.Controls" Version="10.0.110" />
         <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="10.0.110" />
-        <PackageReference Include="RuneForBlazor.UI" Version="0.17.0" />
-        <PackageReference Include="RuneForBlazor.Icons" Version="0.17.0" />
-        <PackageReference Include="RuneForBlazor.Desktop.Maui" Version="0.17.0" />
+        <PackageReference Include="RuneForBlazor.UI" Version="0.17.1" />
+        <PackageReference Include="RuneForBlazor.Icons" Version="0.17.1" />
+        <PackageReference Include="RuneForBlazor.Desktop.Maui" Version="0.17.1" />
     </ItemGroup>
 
 </Project>
