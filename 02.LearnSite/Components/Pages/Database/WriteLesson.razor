@@ -79,7 +79,7 @@
                 </Stage>
                 <Side>
                     <Narration Mood="⏱">
-                        数据库和程序在同一台机器上，往返已经很快，差距仍然明显；<strong>真实现场数据库在另一台服务器上时，每次往返还要再加几毫秒网络时间，逐条写更不可接受</strong>。
+                        测速期间不记录 SQL（一千条会把日志刷爆）。数据库和程序在同一台机器上，往返已经很快，差距仍然明显；<strong>真实现场数据库在另一台服务器上时，每次往返还要再加几毫秒网络时间，逐条写更不可接受</strong>。
                         每次测完这些测试行会自动删掉，不会留在库里。
                     </Narration>
                 </Side>
@@ -182,19 +182,35 @@
     async Task OneByOne()
     {
         var rows = BenchRows();
-        var watch = Stopwatch.StartNew();
-        foreach (var row in rows) await Db.Db.Insert(row).ExecuteAsync();
-        oneByOneMs = watch.Elapsed.TotalMilliseconds;
-        await Db.Db.Delete<Reading>().Where(r => r.Tag == "bench").ExecuteAsync();
+        Db.Log.Paused = true;   // 一千条 SQL 不往日志里记，也不让界面跟着刷
+        try
+        {
+            var watch = Stopwatch.StartNew();
+            foreach (var row in rows) await Db.Db.Insert(row).ExecuteAsync();
+            oneByOneMs = watch.Elapsed.TotalMilliseconds;
+            await Db.Db.Delete<Reading>().Where(r => r.Tag == "bench").ExecuteAsync();
+        }
+        finally
+        {
+            Db.Log.Paused = false;
+        }
     }
 
     async Task BatchInsert()
     {
         var rows = BenchRows();
-        var watch = Stopwatch.StartNew();
-        await Db.Db.Insert(rows).Batch().ExecuteAsync();
-        batchMs = watch.Elapsed.TotalMilliseconds;
-        await Db.Db.Delete<Reading>().Where(r => r.Tag == "bench").ExecuteAsync();
+        Db.Log.Paused = true;
+        try
+        {
+            var watch = Stopwatch.StartNew();
+            await Db.Db.Insert(rows).Batch().ExecuteAsync();
+            batchMs = watch.Elapsed.TotalMilliseconds;
+            await Db.Db.Delete<Reading>().Where(r => r.Tag == "bench").ExecuteAsync();
+        }
+        finally
+        {
+            Db.Log.Paused = false;
+        }
     }
 
     string BatchCode => string.Join("\n",
