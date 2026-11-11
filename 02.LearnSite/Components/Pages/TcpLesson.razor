@@ -1,0 +1,223 @@
+@page "/tcp"
+@using System.Text
+@using LearnSite.Services
+@implements IDisposable
+@inherits RuneComponent
+
+@*
+    通信 1：Socket / TCP（对应教程 03-Socket课程，源码整合大全\Socket源码）。
+      演示 1：真实的本机 TCP——服务端监听、客户端连接、发字节、收回复（走的是真正的操作系统 Socket）
+      演示 2：TCP 是"字节流"不是"一条条消息"——数据会被随意切块，所以必须自己分帧（粘包 / 拆包）
+*@
+
+<LessonPage Title="Socket / TCP：字节在网线上怎么走">
+    <Intro>
+        上位机和 PLC、仪表、网关说话，最底层就是 <strong>TCP</strong>：先<strong>连接</strong>（三次握手），然后双方互相发<strong>字节</strong>。
+        Modbus TCP、S7 都只是"约定好这些字节是什么意思"的协议，跑在 TCP 之上。可以把 TCP 想成<strong>一根不会丢、不会乱序的水管</strong>：
+        你往一头倒水（字节），另一头按同样的顺序流出来，但水管<strong>不记得你一次倒了多少</strong>。
+        下面第一个演示是<strong>真的</strong>在本机开了一个服务端，让你亲手发一次。
+    </Intro>
+    <ChildContent>
+        <Demo Title="演示 1：真实的 TCP 往返（本机回环 127.0.0.1）">
+            <Stage>
+                <Flex Gap="SpaceScale.Sm" Wrap="true">
+                    <Slot Name="服务端监听" Data="@($"127.0.0.1:{tcp.Port}")" />
+                    <Slot Name="客户端状态" Data="@(connected ? "已连接" : "未连接")" Changed="@connected" />
+                </Flex>
+                <Flex Gap="SpaceScale.Sm" Wrap="true">
+                    <Button Icon="Lucide.Plug" Disabled="@connected" @onclick="Connect">连接</Button>
+                    <Button Variant="ButtonVariant.Soft" Tone="Tone.Neutral" Icon="Lucide.Unplug" Disabled="@(!connected)" @onclick="Disconnect">断开</Button>
+                </Flex>
+                <Field Label="要发送的文字（按 UTF-8 编码成字节）">
+                    <TextField @bind-Value="text" />
+                </Field>
+                <Flex Gap="SpaceScale.Sm" Wrap="true">
+                    <Button Icon="Lucide.Send" Disabled="@(!connected)" @onclick="Send">发送</Button>
+                </Flex>
+                <Paragraph Tone="TextTone.Muted">将要发送的字节：<Code>@LoopbackTcp.Hex(Encoding.UTF8.GetBytes(text))</Code></Paragraph>
+            </Stage>
+            <Side>
+                <IconLabel Icon="Lucide.Terminal">通信记录</IconLabel>
+                <Flex Direction="LayoutDirection.Column" Gap="SpaceScale.Xs">
+                    @if (log.Count == 0)
+                    {
+                        <Paragraph Tone="TextTone.Muted">（还没有通信，先点“连接”）</Paragraph>
+                    }
+                    @foreach (var (line, i) in log.Select((l, i) => (l, i)))
+                    {
+                        <Code @key="@($"{i}{line}")">@line</Code>
+                    }
+                </Flex>
+                <CodeBlock Code="@ClientCode" Lang="csharp" Copyable="false" />
+                <Narration Mood="🔌">
+                    服务端 <Code>TcpListener</Code> 在 <Code>Accept</Code> 里等人来；客户端 <Code>TcpClient.ConnectAsync</Code> 连上后，
+                    双方各拿到一个 <Code>NetworkStream</Code>，<strong>读写的都是 byte[]</strong>。中文"你好"在 UTF-8 里占 6 个字节，注意看上面的字节数。
+                </Narration>
+            </Side>
+        </Demo>
+
+        <Demo Title="演示 2：粘包与拆包——TCP 不保留“一条消息”的边界">
+            <Stage>
+                <Paragraph Tone="TextTone.Muted">
+                    设备连续发了三条消息：<Code>温度=25</Code>、<Code>压力=101</Code>、<Code>OK</Code>。网络把这串字节<strong>切成几块</strong>送到，每块大小由网络决定。拖动滑块改变每块的大小：
+                </Paragraph>
+                <Field Label="@($"每块最多 {chunkSize} 字节")">
+                    <Slider TValue="int" @bind-Value="chunkSize" Min="1" Max="30" />
+                </Field>
+                <ToggleGroup @bind-Value="framing" Required="true" aria-label="接收方式">
+                    <ToggleItem Value="naive">不分帧：来一块当一条</ToggleItem>
+                    <ToggleItem Value="length">长度前缀：先读长度再读内容</ToggleItem>
+                </ToggleGroup>
+                <IconLabel Icon="Lucide.Package">到达的块（原样）</IconLabel>
+                <Flex Gap="SpaceScale.Sm" Wrap="true">
+                    @foreach (var (chunk, i) in Chunks.Select((c, i) => (c, i)))
+                    {
+                        <Slot @key="@($"{chunkSize}{i}")" Name="@($"第 {i + 1} 块")" Data="@LoopbackTcp.Hex(chunk)" />
+                    }
+                </Flex>
+            </Stage>
+            <Side>
+                <IconLabel Icon="Lucide.Inbox">接收方解析出的“消息”</IconLabel>
+                <Flex Direction="LayoutDirection.Column" Gap="SpaceScale.Xs">
+                    @foreach (var (message, i) in Parsed.Select((m, i) => (m, i)))
+                    {
+                        <Code @key="@($"{framing}{chunkSize}{i}")">@message</Code>
+                    }
+                </Flex>
+                <Narration @key="@framing" Mood="@(framing == "length" ? "✅" : "💥")">
+                    @if (framing == "length")
+                    {
+                        <text>不管切成多小，接收方把到的字节<strong>先攒进缓冲区</strong>，凑够“2 字节长度 + 内容”才取出一条，所以永远是对的。</text>
+                    }
+                    else
+                    {
+                        <text>块大小一变，消息就被<strong>劈开</strong>（拆包）或<strong>合并</strong>（粘包），乱码或半条消息都出现了。TCP 只保证字节<strong>顺序和不丢</strong>，不保证一次 Receive 对应一次 Send。</text>
+                    }
+                </Narration>
+                <CodeBlock Code="@FramingCode" Lang="csharp" Copyable="false" />
+            </Side>
+        </Demo>
+
+        <Quiz Question="对方发了两次 Send（各 10 字节），你一次 Receive 可能读到什么？" Options="@(new[] { "一定是 10 字节", "可能 20 字节，也可能 3 字节、17 字节……", "一定是 20 字节" })" Answer="1"
+              Explain="TCP 是字节流，没有消息边界。一次读到多少取决于网络和缓冲区，所以协议必须自己带边界：固定长度、长度前缀、分隔符（如换行）。Modbus TCP 的报文头里就有长度字段。" />
+
+        <Prose Measure="false">
+            <H2>上位机里要记住的几件事</H2>
+            <ul>
+                <li><strong>Read 返回 0 字节</strong> = 对方关闭了连接，要结束循环并释放资源。</li>
+                <li><strong>永远要分帧</strong>：Modbus TCP 用头里的长度；自定义协议用"头 + 长度 + 内容 + 校验"；文本协议常用换行结尾。</li>
+                <li><strong>收发要放到后台</strong>：用 <Code>async/await</Code> 读写，不要在界面线程里阻塞；收到数据后切回 UI 线程再更新界面。</li>
+                <li><strong>要设超时</strong>：设备断电时网线不一定立刻报错，读操作要带超时（上面演示用的是 <Code>CancellationTokenSource</Code>）。</li>
+            </ul>
+        </Prose>
+    </ChildContent>
+</LessonPage>
+
+@code {
+    readonly LoopbackTcp tcp = new();
+    readonly List<string> log = [];
+    bool connected;
+    string text = "你好 PLC";
+
+    protected override void OnInitialized()
+    {
+        tcp.ServerLog += OnServerLog;
+        tcp.StartServer();
+    }
+
+    void OnServerLog(string line) => _ = InvokeAsync(() =>
+    {
+        log.Add($"[服务端] {line}");
+        StateHasChanged();
+    });
+
+    async Task Connect()
+    {
+        await tcp.ConnectAsync();
+        connected = true;
+        log.Add("[客户端] 已连接到服务端。");
+    }
+
+    void Disconnect()
+    {
+        tcp.Disconnect();
+        connected = false;
+        log.Add("[客户端] 主动断开。");
+    }
+
+    async Task Send()
+    {
+        var data = Encoding.UTF8.GetBytes(text);
+        log.Add($"[客户端] 发送 {data.Length} 字节：{LoopbackTcp.Hex(data)}");
+        try
+        {
+            var reply = await tcp.SendAsync(data);
+            log.Add($"[客户端] 收到 {reply.Length} 字节：{LoopbackTcp.Hex(reply)}  =  \"{Encoding.UTF8.GetString(reply)}\"");
+        }
+        catch (Exception ex) when (ex is OperationCanceledException or IOException)
+        {
+            log.Add("[客户端] 等回复超时或连接已断。");
+            connected = false;
+        }
+    }
+
+    string ClientCode => string.Join("\n",
+        "using var client = new TcpClient();",
+        "await client.ConnectAsync(IPAddress.Loopback, port);",
+        "var stream = client.GetStream();",
+        "",
+        $"byte[] data = Encoding.UTF8.GetBytes(\"{text}\");   // {Encoding.UTF8.GetByteCount(text)} 字节",
+        "await stream.WriteAsync(data);",
+        "",
+        "var buffer = new byte[1024];",
+        "int count = await stream.ReadAsync(buffer);   // 0 表示对方关闭",
+        "var reply = buffer[..count];");
+
+    // ---- 演示 2 ----
+    int chunkSize = 7;
+    string framing = "naive";
+
+    static readonly string[] messages = ["温度=25", "压力=101", "OK"];
+
+    /// <summary>三条消息，每条前面带 2 字节长度（大端）。</summary>
+    static readonly byte[] WireBytes = [.. messages.SelectMany(m =>
+    {
+        var body = Encoding.UTF8.GetBytes(m);
+        return new byte[] { (byte)(body.Length >> 8), (byte)body.Length }.Concat(body);
+    })];
+
+    List<byte[]> Chunks => [.. WireBytes.Chunk(chunkSize)];
+
+    IEnumerable<string> Parsed => framing == "naive" ? Chunks.Select(c => Encoding.UTF8.GetString(c)) : ParseFramed();
+
+    IEnumerable<string> ParseFramed()
+    {
+        List<byte> buffer = [];
+        foreach (var chunk in Chunks)
+        {
+            buffer.AddRange(chunk);
+            while (buffer.Count >= 2 && buffer.Count >= 2 + ((buffer[0] << 8) | buffer[1]))
+            {
+                var length = (buffer[0] << 8) | buffer[1];
+                yield return Encoding.UTF8.GetString([.. buffer.Skip(2).Take(length)]);
+                buffer.RemoveRange(0, 2 + length);
+            }
+        }
+    }
+
+    const string FramingCode = """
+        // 发送：2 字节长度 + 内容
+        byte[] body = Encoding.UTF8.GetBytes("温度=25");
+        byte[] frame = [(byte)(body.Length >> 8), (byte)body.Length, .. body];
+
+        // 接收：先攒进缓冲区，够一整帧才取出
+        buffer.AddRange(chunk);
+        while (buffer.Count >= 2 && buffer.Count >= 2 + length) { /* 取出一条 */ }
+        """;
+
+    public void Dispose()
+    {
+        tcp.ServerLog -= OnServerLog;
+        tcp.Dispose();
+    }
+}
