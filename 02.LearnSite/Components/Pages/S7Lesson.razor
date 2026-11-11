@@ -1,0 +1,142 @@
+@page "/s7"
+@using System.Buffers.Binary
+@using LearnSite.Services
+@inherits RuneComponent
+
+@*
+    通信 5：西门子 S7（对应教程 05-C#与西门子S7-1200PLC通信源码、Sharp7）。
+    没有真实 PLC 也能学：这里用一块模拟的 DB 数据区，演示"地址怎么对应到字节、字节怎么变成数值"。
+*@
+
+<LessonPage Title="西门子 S7：按地址读写 PLC 的数据块">
+    <Intro>
+        西门子 PLC（S7-300 / 1200 / 1500）的数据放在<strong>数据块（DB）</strong>里，每个 DB 就是一长串字节。
+        上位机通过 S7 协议（走 TCP 102 端口）告诉 PLC：「读 DB1 里，从第 2 个字节开始的 2 个字节」，PLC 就把原始字节返回。
+        你要做的，是把<strong>地址写法</strong>翻译成「第几个字节、几个字节长」，再把返回的字节按<strong>大端</strong>翻译成数值。
+    </Intro>
+    <ChildContent>
+        <ConceptGuide>
+            <Concept Term="DB 数据块与地址" Analogy="DB 是一栋楼，字节是房间号；地址 DB1.DBW2 就是「1 号楼，从第 2 个房间起，占一个 W（2 个房间）」。">
+                地址格式：<Code>DB号.类型 偏移</Code>。<Code>DBX</Code> 是位（还要写第几位）、<Code>DBB</Code> 是 1 字节、<Code>DBW</Code> 是 2 字节（字）、<Code>DBD</Code> 是 4 字节（双字）。
+            </Concept>
+            <Concept Term="数据类型与长度" Analogy="不同大小的盒子：Bool 一个开关、Byte 一格、Int 两格、DInt/Real 四格。">
+                <Code>Bool</Code> 1 位 · <Code>Byte</Code> 1 字节 · <Code>Int</Code> 2 字节（有符号）· <Code>DInt</Code> 4 字节 · <Code>Real</Code> 4 字节 IEEE754 浮点。同一个地址按不同类型读，得到完全不同的数。
+            </Concept>
+            <Concept Term="大端" Analogy="西门子习惯高位字节放前面，和 Modbus 一样。" Compare="见「大小端」一课：电脑是小端，所以 Sharp7 里读 Int / Real 时要用它提供的 S7.GetIntAt 等方法，而不是直接 BitConverter。">
+                PLC 里 <Code>16#00FD</Code> 在内存里就是 <Code>00 FD</Code>，不需要反转；但电脑上直接 BitConverter 读出来是反的。
+            </Concept>
+            <Concept Term="协议分层" Analogy="寄快递：外面一层快递单（TCP），里面一层物流单（TPKT/COTP），最里面才是真正的货物（S7 读写请求）。">
+                S7 请求是一层包一层：<Code>TCP 102 端口 → TPKT（4 字节，含总长度）→ COTP（3 字节）→ S7 头 → 参数 → 数据</Code>。好在 Sharp7 这样的库已经替你封装好了，你只需要「连接、读、写」。
+            </Concept>
+        </ConceptGuide>
+
+        <Demo Title="演示：把地址翻译成字节，再把字节翻译成数值">
+            <Stage>
+                <IconLabel Icon="Lucide.Database">模拟的 DB1 数据区（16 字节，PLC 里存着的原始内容）</IconLabel>
+                <Flex Gap="SpaceScale.Sm" Wrap="true">
+                    @for (var i = 0; i < Db.Length; i++)
+                    {
+                        <Slot @key="@($"{i}{Selected(i)}")" Name="@($"字节 {i}")" Data="@Db[i].ToString("X2")" Changed="@Selected(i)" />
+                    }
+                </Flex>
+                <Paragraph Tone="TextTone.Muted">这块 DB 的约定：DBW0 = 温度×10；DBW2 = 压力；DBD4 = Real 25.0；DBD8 = DInt 100000；DBB12 = 状态字节。</Paragraph>
+                <Paragraph Tone="TextTone.Muted">选数据类型：</Paragraph>
+                <ToggleGroup @bind-Value="typeKey" Required="true" aria-label="数据类型">
+                    <ToggleItem Value="X">Bool（DBX）</ToggleItem>
+                    <ToggleItem Value="B">Byte（DBB）</ToggleItem>
+                    <ToggleItem Value="W">Int（DBW）</ToggleItem>
+                    <ToggleItem Value="DI">DInt（DBD）</ToggleItem>
+                    <ToggleItem Value="R">Real（DBD）</ToggleItem>
+                </ToggleGroup>
+                <Field Label="@($"字节偏移 {Off}")"><Slider TValue="int" @bind-Value="offset" Min="0" Max="@(15 - Math.Max(Size, 1) + 1)" /></Field>
+                @if (typeKey == "X")
+                {
+                    <Field Label="@($"位号 {bit}")"><Slider TValue="int" @bind-Value="bit" Min="0" Max="7" /></Field>
+                }
+            </Stage>
+            <Side>
+                <Grid MinItemWidth="CssLength.Rem(12)" Gap="SpaceScale.Sm">
+                    <Readout Title="PLC 地址写法" Value="@Address" />
+                    <Readout Title="读取多少字节" Value="@(typeKey == "X" ? "1 字节中的 1 位" : $"{Size} 字节")" />
+                    <Readout Title="原始字节" Value="@LoopbackTcp.Hex(Raw)" />
+                    <Readout Title="解析成数值" Value="@Value" />
+                </Grid>
+                <Narration @key="@($"{typeKey}{Off}{bit}")" Mood="🧭">@Explain</Narration>
+                <CodeBlock Code="@Sharp7Code" Lang="csharp" Copyable="false" />
+            </Side>
+        </Demo>
+
+        <Quiz Question="为什么同一个地址 DBD4，按 Real 读是 25.0，按 DInt 读却是 1103626240？" Options="@(new[] { "读错了", "字节是一样的，只是翻译规则（类型）不同", "PLC 里存了两份" })" Answer="1"
+              Explain="PLC 里只有字节，没有「这是什么类型」的标记。类型是 PLC 程序和上位机双方约定的翻译规则，约定错了就读出乱数。用浮点数规则看 41 C8 00 00 是 25.0，按整数看就是 0x41C80000 = 1103626240。" />
+
+        <Prose Measure="false">
+            <H2>用 Sharp7 读 PLC 的几个坑</H2>
+            <ul>
+                <li><strong>西门子 1200 / 1500 要开权限</strong>：PLC 属性里勾选「允许来自远程对象的 PUT/GET 通信访问」，并且 DB 要取消「优化的块访问」，否则读不到。</li>
+                <li><strong>机架号与槽号</strong>：1200 / 1500 填机架 0、槽 1；300 通常是机架 0、槽 2。填错连不上。</li>
+                <li><strong>一次读的长度有限</strong>（PDU 大小，一般几百字节），大量数据要分批。</li>
+                <li>读到的是原始字节，<strong>用 Sharp7 的 <Code>S7.GetRealAt</Code> / <Code>GetIntAt</Code></strong> 解析，不要自己当小端处理。</li>
+                <li>Bool 要读所在字节，再按位取；<strong>写 Bool 要先读出整个字节，改某一位，再写回</strong>，避免把同字节的其他位覆盖掉。</li>
+            </ul>
+        </Prose>
+    </ChildContent>
+</LessonPage>
+
+@code {
+    static readonly byte[] Db =
+    [
+        0x00, 0xFD,             // DBW0  = 253（温度 25.3）
+        0x00, 0x65,             // DBW2  = 101
+        0x41, 0xC8, 0x00, 0x00, // DBD4  = Real 25.0
+        0x00, 0x01, 0x86, 0xA0, // DBD8  = DInt 100000
+        0b0000_0101,            // DBB12 = 状态字节：第 0、2 位为 1
+        0x00, 0x00, 0x00,
+    ];
+
+    string typeKey = "W";
+    int offset = 0;
+    int bit = 0;
+
+    int Off => Math.Min(offset, 16 - Size);
+
+    int Size => typeKey switch { "X" or "B" => 1, "W" => 2, _ => 4 };
+
+    bool Selected(int index) => index >= Off && index < Off + Size;
+
+    byte[] Raw => Db[Off..(Off + Size)];
+
+    string Address => typeKey switch
+    {
+        "X" => $"DB1.DBX{Off}.{bit}",
+        "B" => $"DB1.DBB{Off}",
+        "W" => $"DB1.DBW{Off}",
+        _ => $"DB1.DBD{Off}",
+    };
+
+    string Value => typeKey switch
+    {
+        "X" => ((Db[Off] >> bit) & 1) == 1 ? "True" : "False",
+        "B" => Db[Off].ToString(),
+        "W" => BinaryPrimitives.ReadInt16BigEndian(Raw).ToString(),
+        "DI" => BinaryPrimitives.ReadInt32BigEndian(Raw).ToString(),
+        _ => BinaryPrimitives.ReadSingleBigEndian(Raw).ToString("G9"),
+    };
+
+    string Explain => typeKey switch
+    {
+        "X" => $"DBX{Off}.{bit} 是「第 {Off} 个字节的第 {bit} 位」。先取这 1 个字节 {Db[Off]:X2}，再右移 {bit} 位取最低位。",
+        "B" => $"DBB{Off} 就是单独的一个字节，直接当 0~255 的数。",
+        "W" => $"DBW{Off} 取 {Off}、{Off + 1} 两个字节，按「大端」拼成 16 位有符号整数：高字节在前。",
+        "DI" => $"DBD{Off} 取 4 个字节，按大端拼成 32 位有符号整数。如果这个位置存的其实是 Real，这里读出来就是乱数。",
+        _ => $"DBD{Off} 取 4 个字节，按大端 + IEEE754 解释成浮点数。如果这个位置存的其实是整数，这里读出来就是乱数。",
+    };
+
+    string Sharp7Code => typeKey switch
+    {
+        "X" => $"var buffer = new byte[1];\nclient.DBRead(1, {Off}, 1, buffer);\nbool on = S7.GetBitAt(buffer, 0, {bit});",
+        "B" => $"var buffer = new byte[1];\nclient.DBRead(1, {Off}, 1, buffer);\nbyte value = buffer[0];",
+        "W" => $"var buffer = new byte[2];\nclient.DBRead(1, {Off}, 2, buffer);\nshort value = S7.GetIntAt(buffer, 0);",
+        "DI" => $"var buffer = new byte[4];\nclient.DBRead(1, {Off}, 4, buffer);\nint value = S7.GetDIntAt(buffer, 0);",
+        _ => $"var buffer = new byte[4];\nclient.DBRead(1, {Off}, 4, buffer);\nfloat value = S7.GetRealAt(buffer, 0);",
+    };
+}

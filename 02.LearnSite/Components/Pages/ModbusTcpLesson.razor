@@ -1,0 +1,183 @@
+@page "/modbustcp"
+@using LearnSite.Services
+@implements IDisposable
+@inherits RuneComponent
+
+@*
+    通信 2：Modbus TCP（对应教程 04-上位机通信协议课程 3-x，源码整合大全\ModbusTCP源码）。
+    本机回环上有一台真实的"模拟设备"（TCP 服务端），学习者作为主站亲手发请求、看字段、看回复。
+*@
+
+<LessonPage Title="Modbus TCP：和设备「一问一答」">
+    <Intro>
+        Modbus 是工业里最常见的协议：<strong>主站（你的上位机）发一个请求，从站（设备）回一个应答</strong>，永远是一问一答。
+        设备里的数据放在一排编号的<strong>寄存器</strong>里，每个寄存器 16 位（2 字节）。主站要做的就是：说清楚「读哪几个、从哪开始」，再把回来的字节翻译成温度、压力这些数。
+    </Intro>
+    <ChildContent>
+        <ConceptGuide>
+            <Concept Term="主站与从站" Analogy="主站像点名的老师，从站像学生：老师点到谁，谁才能回答；学生不会主动说话。">
+                Modbus 是<strong>主从结构</strong>：从站只被动回答，不会主动上报。想要实时数据，上位机就得<strong>定时轮询</strong>。
+            </Concept>
+            <Concept Term="寄存器" Analogy="设备身上一排带编号的小抽屉，每个抽屉能放一个 16 位的数（0~65535）。">
+                温度 25.3 ℃ 通常存成整数 253（放大 10 倍）；一个 float 要占相邻两个寄存器；一个状态字的每一位是一个开关。<strong>怎么翻译，由设备手册规定</strong>。
+            </Concept>
+            <Concept Term="功能码" Analogy="请求单上的「业务类型」：03 是查询，06 是修改一个，16 是修改一批。">
+                常用的：<Code>03</Code> 读保持寄存器，<Code>04</Code> 读输入寄存器，<Code>06</Code> 写单个寄存器，<Code>16（0x10）</Code> 写多个寄存器，<Code>01/05</Code> 读/写线圈（开关量）。
+            </Concept>
+            <Concept Term="MBAP 头（Modbus TCP 特有）" Analogy="快递面单：事务号是单号，长度告诉你包裹里有几个字节，单元号是收件人。">
+                TCP 版比串口版多一个 7 字节的头，<strong>没有 CRC</strong>（TCP 自己已经保证数据正确）。头里的「长度」让接收方知道一帧到哪里结束，用来解决上一课讲的粘包问题。
+            </Concept>
+        </ConceptGuide>
+
+        <Demo Title="演示：亲手发一个请求，看报文怎么拆">
+            <Stage>
+                <Flex Gap="SpaceScale.Sm" Wrap="true">
+                    <Slot Name="模拟设备" Data="@($"127.0.0.1:{modbus.Port}")" />
+                    <Slot Name="主站状态" Data="@(connected ? "已连接" : "未连接")" Changed="@connected" />
+                </Flex>
+                <Flex Gap="SpaceScale.Sm" Wrap="true">
+                    <Button Icon="Lucide.Plug" Disabled="@connected" @onclick="Connect">连接</Button>
+                    <Button Variant="ButtonVariant.Soft" Tone="Tone.Neutral" Icon="Lucide.Unplug" Disabled="@(!connected)" @onclick="Disconnect">断开</Button>
+                </Flex>
+                <ToggleGroup @bind-Value="functionKey" Required="true" aria-label="功能码">
+                    <ToggleItem Value="3">03 读寄存器</ToggleItem>
+                    <ToggleItem Value="6">06 写寄存器</ToggleItem>
+                    <ToggleItem Value="8">08 设备不支持的功能</ToggleItem>
+                </ToggleGroup>
+                <Field Label="@($"起始地址 {address}（设备只有 0~9 号寄存器）")">
+                    <Slider TValue="int" @bind-Value="address" Min="0" Max="12" />
+                </Field>
+                <Field Label="@(functionKey == "6" ? $"要写入的值 {value}" : $"读取数量 {value}")">
+                    <Slider TValue="int" @bind-Value="value" Min="0" Max="@(functionKey == "6" ? 1000 : 12)" />
+                </Field>
+                <Flex Gap="SpaceScale.Sm" Wrap="true">
+                    <Button Icon="Lucide.Send" Disabled="@(!connected)" @onclick="Send">发送请求</Button>
+                </Flex>
+                <IconLabel Icon="Lucide.Cpu">设备里的寄存器（真实状态）</IconLabel>
+                <Flex Gap="SpaceScale.Sm" Wrap="true">
+                    @for (var i = 0; i < ModbusDevice.RegisterCount; i++)
+                    {
+                        var index = i;
+                        <Slot @key="@($"{index}{modbus.Device.Registers[index]}")" Name="@($"[{index}] {RegisterName(index)}")" Data="@modbus.Device.Registers[index].ToString()" Changed="@(index == lastWritten)" />
+                    }
+                </Flex>
+            </Stage>
+            <Side>
+                <FrameView Title="请求（主站发出）" Icon="Lucide.ArrowRight" Fields="request" />
+                <FrameView Title="应答（设备回复）" Icon="Lucide.ArrowLeft" Fields="response" Highlight="true" />
+                <Narration @key="@note" Mood="@noteMood">@note</Narration>
+                <CodeBlock Code="@BuildCode" Lang="csharp" Copyable="false" />
+            </Side>
+        </Demo>
+
+        <Quiz Question="读 2 个寄存器（03 功能码），应答的数据区会有几个字节？" Options="@(new[] { "2 个字节", "4 个字节", "不一定" })" Answer="1"
+              Explain="每个寄存器 16 位 = 2 字节，2 个寄存器就是 4 字节。应答里还有一个「字节数」字段 = 4，接收方靠它知道数据区多长。" />
+        <Quiz Question="为什么 Modbus TCP 的报文里没有 CRC 校验？" Options="@(new[] { "TCP 已经保证数据不出错、不乱序", "Modbus TCP 不需要正确性", "校验放在了功能码里" })" Answer="0"
+              Explain="TCP 协议本身带校验和与重传，数据到达时是正确的。串口没有这层保障，所以 Modbus RTU 必须自己加 CRC（下一课）。" />
+
+        <Prose Measure="false">
+            <H2>实际写上位机时的要点</H2>
+            <ul>
+                <li><strong>事务号要递增</strong>，收到应答后核对事务号，防止错配（尤其是一次发多个请求时）。</li>
+                <li><strong>异常应答</strong>：功能码最高位变 1（<Code>03</Code> → <Code>83</Code>），后面跟一个异常码。读不到数据时先看异常码，而不是怀疑网络。</li>
+                <li><strong>地址从 0 还是 1 开始</strong>：协议里是从 0 开始，但很多设备手册写成 40001（保持寄存器区）开头，实际发的地址要减去偏移，这是最常见的踩坑点。</li>
+                <li><strong>一次最多读 125 个寄存器</strong>（03 功能码），读很多点位时要分批。</li>
+                <li>寄存器怎么变成 float、整数，要看<strong>字节序与字序</strong>（见「大小端」一课）。</li>
+            </ul>
+        </Prose>
+    </ChildContent>
+</LessonPage>
+
+@code {
+    readonly ModbusLoopback modbus = new();
+    bool connected;
+    string functionKey = "3";
+    int address = 0;
+    int value = 3;
+    int lastWritten = -1;
+    string note = "先点“连接”，再点“发送请求”。默认从 0 号寄存器读 3 个：温度、压力、状态字。";
+    string noteMood = "💡";
+    IReadOnlyList<FrameField> request = [];
+    IReadOnlyList<FrameField> response = [];
+
+    protected override void OnInitialized() => modbus.StartServer();
+
+    static string RegisterName(int index) => index switch
+    {
+        0 => "温度×10",
+        1 => "压力",
+        2 => "状态字",
+        3 => "float 高字",
+        4 => "float 低字",
+        _ => "保留",
+    };
+
+    async Task Connect()
+    {
+        await modbus.ConnectAsync();
+        connected = true;
+        note = "已连接。TCP 连接建好了，接下来就是一问一答。";
+    }
+
+    void Disconnect()
+    {
+        modbus.Disconnect();
+        connected = false;
+    }
+
+    async Task Send()
+    {
+        var function = byte.Parse(functionKey);
+        var (frame, fields) = ModbusCodec.BuildTcpRequest(modbus.NextTransactionId(), 1, function, (ushort)address, (ushort)value);
+        request = fields;
+        response = [];
+        try
+        {
+            var reply = await modbus.RequestAsync(frame);
+            response = ModbusCodec.ExplainTcpResponse(reply);
+            Interpret(reply, function);
+        }
+        catch (Exception ex) when (ex is OperationCanceledException or IOException)
+        {
+            note = "等待应答超时或连接中断。";
+            noteMood = "❌";
+            connected = false;
+        }
+    }
+
+    void Interpret(byte[] reply, byte function)
+    {
+        lastWritten = -1;
+        if ((reply[7] & 0x80) != 0)
+        {
+            note = $"设备拒绝了请求：{ModbusCodec.ExceptionText(reply[8])}。注意应答的功能码变成了 {reply[7]:X2}（原功能码 + 0x80）。";
+            noteMood = "💥";
+        }
+        else if (function == 3)
+        {
+            var registers = ModbusCodec.ParseRegisters(reply);
+            note = $"读到 {registers.Length} 个寄存器：{string.Join("、", registers.Select((r, i) => $"[{address + i}]={r}"))}。"
+                + (address == 0 && registers.Length >= 1 ? $"其中 [0]={registers[0]} 是温度×10，即 {registers[0] / 10.0:F1} ℃。" : "");
+            noteMood = "✅";
+        }
+        else
+        {
+            lastWritten = address;
+            note = $"写入成功：设备把 [{address}] 改成了 {value}，并把地址和值原样回显。看上面“设备里的寄存器”，那个盒子变了。";
+            noteMood = "✅";
+        }
+    }
+
+    string BuildCode => string.Join("\n",
+        "// 请求 = MBAP 头 + 功能码 + 起始地址 + 数量，全部大端",
+        "byte[] frame = new byte[12];",
+        "BinaryPrimitives.WriteUInt16BigEndian(frame, transactionId);          // 事务号",
+        "BinaryPrimitives.WriteUInt16BigEndian(frame.AsSpan(2), 0);            // 协议号",
+        "BinaryPrimitives.WriteUInt16BigEndian(frame.AsSpan(4), 6);            // 长度",
+        $"frame[6] = 1;                                                       // 单元号",
+        $"frame[7] = {byte.Parse(functionKey)};                                                       // 功能码",
+        $"BinaryPrimitives.WriteUInt16BigEndian(frame.AsSpan(8), {address});            // 起始地址",
+        $"BinaryPrimitives.WriteUInt16BigEndian(frame.AsSpan(10), {value});           // {(functionKey == "6" ? "写入值" : "数量")}");
+
+    public void Dispose() => modbus.Dispose();
+}

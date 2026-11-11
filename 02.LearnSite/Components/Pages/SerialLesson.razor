@@ -1,0 +1,193 @@
+@page "/serial"
+@using System.Numerics
+@inherits RuneComponent
+
+@*
+    通信 4：串口（对应教程 01-C#与Winform系列教程 里的串口 018 / 021）。
+    没有真实串口硬件也能学：这里把"一个字节在线上怎么发"和"参数怎么影响速度"算出来、画出来。
+*@
+
+<LessonPage Title="串口通信：一个字节在线上长什么样">
+    <Intro>
+        串口（COM 口，RS-232 / RS-485）是最古老、最普及的工业通信方式：<strong>一根线上，一位一位地依次发出去</strong>。
+        收发双方必须<strong>事先约好</strong>：波特率、数据位、校验位、停止位。约定不一致，收到的就是乱码——这是上位机连不上设备时<strong>最常见的原因</strong>。
+    </Intro>
+    <ChildContent>
+        <ConceptGuide>
+            <Concept Term="波特率" Analogy="说话的语速：双方语速必须一样，否则听起来就是一团乱麻。">
+                每秒传多少「位」。常见 9600、19200、115200。9600 就是每秒 9600 位，约等于每秒 960 个字节（因为每个字节线上要占 10 位左右）。
+            </Concept>
+            <Concept Term="起始位 / 数据位 / 校验位 / 停止位" Analogy="每个字节像一个信封：起始位是「信封开口」，数据位是信的内容，校验位是封口检查，停止位是「信封结束」。">
+                空闲时线路是高电平；<strong>起始位</strong>拉低一位，告诉对方「字节来了」；然后发 7 或 8 位<strong>数据位（低位先发）</strong>；可选的<strong>校验位</strong>用来发现单个位错误；最后 1~2 位<strong>停止位</strong>拉回高电平。
+            </Concept>
+            <Concept Term="奇偶校验" Analogy="数一数数据里有几个 1，再补一位凑成固定的奇偶性。">
+                <strong>偶校验</strong>：数据位加校验位里 1 的总数是偶数；<strong>奇校验</strong>：是奇数。它只能发现奇数个位出错，所以 Modbus RTU 还要再加 CRC 才可靠。
+            </Concept>
+            <Concept Term="RS-232 与 RS-485" Analogy="RS-232 是两个人之间的电话线，距离短；RS-485 是总线，像一条走廊，很多人可以排队在上面说话。">
+                RS-232 点对点、距离约 15 米；RS-485 是<strong>差分、半双工总线</strong>，可达上千米，一条线上可挂很多从站，同一时刻只有一个设备在发。电脑一般通过 USB 转 485 的转换头连接。
+            </Concept>
+        </ConceptGuide>
+
+        <Demo Title="演示 1：一个字节在线上的样子">
+            <Stage>
+                <Field Label="@($"要发送的字节：0x{dataByte:X2}（十进制 {dataByte}，二进制 {Convert.ToString(dataByte, 2).PadLeft(8, '0')}）")">
+                    <Slider TValue="int" @bind-Value="dataByte" Min="0" Max="255" />
+                </Field>
+                <IconLabel Icon="Lucide.Settings">串口参数</IconLabel>
+                <Paragraph Tone="TextTone.Muted">波特率</Paragraph>
+                <ToggleGroup @bind-Value="baudKey" Required="true" aria-label="波特率">
+                    @foreach (var b in Bauds)
+                    {
+                        <ToggleItem Value="@b.ToString()">@b</ToggleItem>
+                    }
+                </ToggleGroup>
+                <Paragraph Tone="TextTone.Muted">数据位 / 校验 / 停止位</Paragraph>
+                <Flex Gap="SpaceScale.Md" Wrap="true">
+                    <ToggleGroup @bind-Value="dataBitsKey" Required="true" aria-label="数据位">
+                        <ToggleItem Value="7">7 位</ToggleItem>
+                        <ToggleItem Value="8">8 位</ToggleItem>
+                    </ToggleGroup>
+                    <ToggleGroup @bind-Value="parity" Required="true" aria-label="校验">
+                        <ToggleItem Value="None">无校验</ToggleItem>
+                        <ToggleItem Value="Even">偶校验</ToggleItem>
+                        <ToggleItem Value="Odd">奇校验</ToggleItem>
+                    </ToggleGroup>
+                    <ToggleGroup @bind-Value="stopKey" Required="true" aria-label="停止位">
+                        <ToggleItem Value="1">1 位停止</ToggleItem>
+                        <ToggleItem Value="2">2 位停止</ToggleItem>
+                    </ToggleGroup>
+                </Flex>
+            </Stage>
+            <Side>
+                <IconLabel Icon="Lucide.Cable">线上依次发出的位（从左到右，时间顺序）</IconLabel>
+                <Flex Gap="SpaceScale.Xs" Wrap="true">
+                    @foreach (var (name, bit, i) in WireBits.Select((w, i) => (w.Name, w.Bit, i)))
+                    {
+                        <Slot @key="@($"{i}{name}{bit}{dataByte}")" Name="@name" Data="@bit.ToString()" Changed="@(name is "起始位" or "停止位" or "校验位")" />
+                    }
+                </Flex>
+                <Grid MinItemWidth="CssLength.Rem(12)" Gap="SpaceScale.Sm">
+                    <Readout Title="一个字节占的位数" Value="@($"{BitsPerChar} 位")" />
+                    <Readout Title="一位的时间" Value="@($"{1_000_000.0 / Baud:F1} 微秒")" />
+                    <Readout Title="一个字节的时间" Value="@($"{CharMs:F3} 毫秒")" />
+                    <Readout Title="每秒最多传" Value="@($"{Baud / BitsPerChar} 字节")" />
+                </Grid>
+                <Narration @key="@($"{parity}{stopKey}{dataBitsKey}")" Mood="🔬">
+                    注意<strong>数据位是低位先发</strong>：@("0x" + dataByte.ToString("X2")) 的最低位最先出现在线上。
+                    @if (parity != "None")
+                    {
+                        <text>校验位 = @ParityBit：数据里有 @OnesCount 个 1，@(parity == "Even" ? "补成偶数个" : "补成奇数个")。</text>
+                    }
+                    else
+                    {
+                        <text>没有校验位，所以一个字节只占 @BitsPerChar 位。</text>
+                    }
+                </Narration>
+            </Side>
+        </Demo>
+
+        <Demo Title="演示 2：一次 Modbus 轮询要花多久？（参数的影响）">
+            <Stage>
+                <Field Label="@($"读取的寄存器个数 {registerCount}")"><Slider TValue="int" @bind-Value="registerCount" Min="1" Max="60" /></Field>
+                <Paragraph Tone="TextTone.Muted">请求固定 8 字节；应答 = 5 字节（地址、功能码、字节数、CRC）+ 每个寄存器 2 字节。波特率沿用上面的选择。</Paragraph>
+            </Stage>
+            <Side>
+                <Grid MinItemWidth="CssLength.Rem(12)" Gap="SpaceScale.Sm">
+                    <Readout Title="请求 8 字节" Value="@($"{8 * CharMs:F1} 毫秒")" />
+                    <Readout Title="@($"应答 {5 + registerCount * 2} 字节")" Value="@($"{(5 + registerCount * 2) * CharMs:F1} 毫秒")" />
+                    <Readout Title="帧间静默（3.5 字符）" Value="@($"{SilentMs:F2} 毫秒")" />
+                    <Readout Title="一次完整往返约" Value="@($"{(8 + 5 + registerCount * 2) * CharMs + 2 * SilentMs:F1} 毫秒")" />
+                </Grid>
+                <Narration Mood="⏱">
+                    在 9600 波特率下读 60 个寄存器大约要 <strong>150 毫秒</strong>；如果总线上挂了 20 台从站，轮询一圈就要几秒。
+                    所以串口通信里要<strong>少读、合并连续地址一次读完、提高波特率</strong>，而不是疯狂地一个个读。
+                </Narration>
+            </Side>
+        </Demo>
+
+        <Demo Title="在 C# 里怎么用 SerialPort（代码要点）">
+            <Stage>
+                <CodeBlock Code="@SerialCode" Lang="csharp" Copyable="false" />
+            </Stage>
+            <Side>
+                <Narration Mood="🧯">
+                    <Code>DataReceived</Code> 在<strong>后台线程</strong>触发，里面不能直接改界面；一次事件里读到的字节也<strong>不保证是一整帧</strong>，要像 TCP 那样攒进缓冲区再分帧。
+                    更稳妥的写法：用请求—应答模式，发完后读到静默时间或读够预期的字节数。
+                </Narration>
+                <Quiz Question="设备手册写「9600, 8, E, 1」，代表什么？" Options="@(new[] { "波特率 9600、8 位数据位、偶校验、1 位停止位", "9600 个字节、8 个设备、E 区、1 次", "波特率 9600、8 位校验、E 位停止、1 位数据" })" Answer="0"
+                      Explain="依次是：波特率、数据位、校验（N 无、E 偶、O 奇）、停止位。上位机的串口设置必须和设备完全一致。" />
+            </Side>
+        </Demo>
+
+        <Prose Measure="false">
+            <H2>连不上设备时按顺序检查</H2>
+            <ol>
+                <li>COM 口号对不对（设备管理器里看 USB 转串口是哪一个）。</li>
+                <li>波特率、数据位、校验、停止位是否和设备一致。</li>
+                <li>485 的 A、B 线有没有接反（接反了收到的全是乱码或没有数据）。</li>
+                <li>从站地址和功能码、寄存器地址对不对。</li>
+                <li>是否有别的软件（比如串口调试助手）占用了这个 COM 口。</li>
+            </ol>
+        </Prose>
+    </ChildContent>
+</LessonPage>
+
+@code {
+    static readonly int[] Bauds = [1200, 4800, 9600, 19200, 38400, 115200];
+
+    int dataByte = 0x5A;
+    string baudKey = "9600";
+    string dataBitsKey = "8";
+    string parity = "None";
+    string stopKey = "1";
+    int registerCount = 10;
+
+    int Baud => int.Parse(baudKey);
+
+    int DataBits => int.Parse(dataBitsKey);
+
+    int StopBits => int.Parse(stopKey);
+
+    int BitsPerChar => 1 + DataBits + (parity == "None" ? 0 : 1) + StopBits;
+
+    double CharMs => BitsPerChar * 1000.0 / Baud;
+
+    /// <summary>Modbus RTU 规定：3.5 个字符时间；波特率高于 19200 时固定 1.75 毫秒。</summary>
+    double SilentMs => Baud > 19200 ? 1.75 : 3.5 * CharMs;
+
+    int Masked => dataByte & ((1 << DataBits) - 1);
+
+    int OnesCount => BitOperations.PopCount((uint)Masked);
+
+    int ParityBit => parity == "Even" ? OnesCount % 2 : 1 - OnesCount % 2;
+
+    IEnumerable<(string Name, int Bit)> WireBits
+    {
+        get
+        {
+            yield return ("起始位", 0);
+            for (var i = 0; i < DataBits; i++) yield return ($"D{i}", (Masked >> i) & 1);
+            if (parity != "None") yield return ("校验位", ParityBit);
+            for (var i = 0; i < StopBits; i++) yield return ("停止位", 1);
+        }
+    }
+
+    const string SerialCode = """
+        using var port = new SerialPort("COM3", 9600, Parity.Even, 8, StopBits.One)
+        {
+            ReadTimeout = 500,   // 读超时，单位毫秒
+            WriteTimeout = 500,
+        };
+        port.Open();
+
+        byte[] request = ModbusCodec.BuildRtuRequest(1, 3, 0, 3);
+        port.DiscardInBuffer();           // 清掉上次残留的数据
+        port.Write(request, 0, request.Length);
+
+        // 请求—应答：读到预期的 3 + 2×3 + 2 = 11 个字节
+        byte[] response = new byte[11];
+        int read = 0;
+        while (read < response.Length)
+            read += port.Read(response, read, response.Length - read);   // 超时会抛 TimeoutException
+        """;
+}

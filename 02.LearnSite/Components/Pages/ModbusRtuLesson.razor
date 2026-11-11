@@ -1,0 +1,175 @@
+@page "/modbusrtu"
+@using LearnSite.Services
+@inherits RuneComponent
+
+@*
+    通信 3：Modbus RTU 与 CRC16（对应 01.CSharpSyntax Exercise06 的 CRC16 与 RTU 请求）。
+    演示 1：搭一帧 RTU 请求，看 CRC 是怎么附在最后的；演示 2：传输中改一位，接收方为什么能发现。
+*@
+
+<LessonPage Title="Modbus RTU 与 CRC：串口上怎么保证不出错">
+    <Intro>
+        <strong>Modbus RTU</strong> 是跑在串口（RS-485 / RS-232）上的 Modbus。内容和 TCP 版几乎一样（单元号、功能码、地址、数量），
+        区别是：没有 7 字节的 MBAP 头，<strong>结尾多了 2 字节的 CRC 校验</strong>。因为串口线上有干扰，一个位翻转了接收方自己发现不了，所以要靠 CRC 来检查。
+    </Intro>
+    <ChildContent>
+        <ConceptGuide>
+            <Concept Term="校验（CRC）" Analogy="快递包裹上的封条编号：寄件人按包裹内容算出一个编号写上去；收件人拿到后自己再算一遍，编号对不上就说明被动过。">
+                发送方把前面所有字节按固定算法算出一个 16 位的数（CRC16），附在最后；接收方对<strong>前面的字节重新计算</strong>，结果与收到的 CRC 不一致，就丢弃这一帧。
+            </Concept>
+            <Concept Term="CRC 为什么低字节在前" Analogy="同一个数，两个字节的摆放顺序不同。Modbus RTU 的数据本身是大端，唯独 CRC 是小端。">
+                例如 CRC 是 <Code>0x0A84</Code>，在报文里写成 <Code>84 0A</Code>。这是 Modbus RTU 出了名的「例外」，写错顺序校验永远不通过。
+            </Concept>
+            <Concept Term="帧与静默时间" Analogy="说话的断句：停顿超过一定时间，就是这句话说完了。">
+                RTU 没有头也没有长度字段，靠<strong>静默时间</strong>（至少 3.5 个字符时间没有新数据）来判断一帧结束。详见下一课「串口」。
+            </Concept>
+        </ConceptGuide>
+
+        <Demo Title="演示 1：搭一帧 RTU 请求">
+            <Stage>
+                <ToggleGroup @bind-Value="functionKey" Required="true" aria-label="功能码">
+                    <ToggleItem Value="3">03 读寄存器</ToggleItem>
+                    <ToggleItem Value="6">06 写寄存器</ToggleItem>
+                </ToggleGroup>
+                <Field Label="@($"从站地址 {unit}")"><Slider TValue="int" @bind-Value="unit" Min="1" Max="247" /></Field>
+                <Field Label="@($"起始地址 {address}")"><Slider TValue="int" @bind-Value="address" Min="0" Max="200" /></Field>
+                <Field Label="@(functionKey == "6" ? $"写入值 {value}" : $"读取数量 {value}")"><Slider TValue="int" @bind-Value="value" Min="1" Max="125" /></Field>
+                <Grid MinItemWidth="CssLength.Rem(12)" Gap="SpaceScale.Sm">
+                    <Readout Title="整帧（8 字节）" Value="@LoopbackTcp.Hex(Frame)" />
+                    <Readout Title="CRC16 数值" Value="@($"0x{Crc:X4}")" />
+                    <Readout Title="线上顺序" Value="@($"{Crc & 0xFF:X2} {Crc >> 8:X2}（低字节在前）")" />
+                </Grid>
+            </Stage>
+            <Side>
+                <FrameView Title="RTU 请求拆开看" Icon="Lucide.Package" Fields="Fields" />
+                <CodeBlock Code="@CrcCode" Lang="csharp" Copyable="false" />
+                <Narration Mood="🧮">
+                    CRC 只覆盖<strong>前 6 个字节</strong>（不包括它自己）。你改任何一个滑块，前 6 字节变了，CRC 就跟着变——这正是它能发现错误的原因。
+                </Narration>
+            </Side>
+        </Demo>
+
+        <Demo Title="演示 2：传输中被干扰一位，接收方怎么发现？">
+            <Stage>
+                <Paragraph Tone="TextTone.Muted">上面这帧在线上传输。点一下想“干扰”的字节（让它的最低位翻转），看接收方的校验结果：</Paragraph>
+                <ToggleGroup @bind-Value="corruptKey" Required="true" aria-label="干扰哪个字节">
+                    <ToggleItem Value="-1">不干扰</ToggleItem>
+                    @foreach (var n in Enumerable.Range(0, 8))
+                    {
+                        <ToggleItem Value="@n.ToString()">第 @(n + 1) 字节</ToggleItem>
+                    }
+                </ToggleGroup>
+                <Flex Gap="SpaceScale.Sm" Wrap="true">
+                    @foreach (var (b, n) in Received.Select((b, n) => (b, n)))
+                    {
+                        <Slot @key="@($"{n}{b}")" Name="@($"字节 {n + 1}")" Data="@b.ToString("X2")" Changed="@(n == Corrupt)" />
+                    }
+                </Flex>
+            </Stage>
+            <Side>
+                <Grid MinItemWidth="CssLength.Rem(12)" Gap="SpaceScale.Sm">
+                    <Readout Title="收到的 CRC" Value="@($"0x{ReceivedCrc:X4}")" />
+                    <Readout Title="接收方重新计算" Value="@($"0x{RecomputedCrc:X4}")" />
+                </Grid>
+                <Narration @key="@corruptKey" Mood="@(CrcOk ? "✅" : "🚨")">
+                    @if (CrcOk && Corrupt < 0)
+                    {
+                        <text>没有被干扰：重新算出的 CRC 和收到的一致，这一帧可以放心使用。</text>
+                    }
+                    else if (CrcOk)
+                    {
+                        <text>这次巧合地没被发现？CRC16 理论上能发现所有单个位错误，所以这种情况几乎不会出现——请检查是否干扰到了 CRC 本身。</text>
+                    }
+                    else
+                    {
+                        <text>两个 CRC 不一致：这一帧在传输中被破坏了，接收方<strong>直接丢弃</strong>（通常再重发一次请求），而不是把错误数据当成真的。</text>
+                    }
+                </Narration>
+            </Side>
+        </Demo>
+
+        <Demo Title="演示 3：RTU 与 TCP 报文对比（同一个请求）">
+            <Stage>
+                <FrameView Title="Modbus RTU（8 字节）" Icon="Lucide.Cable" Fields="Fields" />
+            </Stage>
+            <Side>
+                <FrameView Title="Modbus TCP（12 字节）" Icon="Lucide.Network" Fields="TcpFields" Highlight="true" />
+            </Side>
+        </Demo>
+
+        <Quiz Question="接收方算出的 CRC 和收到的不一样，应该怎么办？" Options="@(new[] { "仍然使用，因为大部分数据可能是对的", "丢弃这一帧，必要时重发请求", "只修正最后一个字节" })" Answer="1"
+              Explain="CRC 不一致说明数据在传输中被破坏，但不知道坏在哪里，所以整帧作废。使用被破坏的数据可能把温度读成完全错误的值。" />
+
+        <Prose Measure="false">
+            <H2>CRC16 算法一句话</H2>
+            <p>初值 <Code>0xFFFF</Code>；每个字节先和 CRC 异或，再循环 8 次：最低位是 1 就「右移一位并异或 <Code>0xA001</Code>」，是 0 就只右移。算法不用背，代码 10 行，上位机里直接用现成的方法（见 01.CSharpSyntax 的 Exercise06），重点是<strong>记得低字节在前</strong>。</p>
+        </Prose>
+    </ChildContent>
+</LessonPage>
+
+@code {
+    string functionKey = "3";
+    int unit = 1;
+    int address = 0;
+    int value = 3;
+    string corruptKey = "-1";
+
+    byte Function => byte.Parse(functionKey);
+
+    byte[] Frame => ModbusCodec.BuildRtuRequest((byte)unit, Function, (ushort)address, (ushort)value);
+
+    ushort Crc => ModbusCodec.Crc16(Frame.AsSpan(0, 6));
+
+    int Corrupt => int.Parse(corruptKey);
+
+    byte[] Received
+    {
+        get
+        {
+            var frame = Frame;
+            if (Corrupt >= 0) frame[Corrupt] ^= 0x01;
+            return frame;
+        }
+    }
+
+    ushort ReceivedCrc => (ushort)(Received[6] | (Received[7] << 8));
+
+    ushort RecomputedCrc => ModbusCodec.Crc16(Received.AsSpan(0, 6));
+
+    bool CrcOk => ReceivedCrc == RecomputedCrc;
+
+    FrameField[] Fields
+    {
+        get
+        {
+            var frame = Frame;
+            return
+            [
+                new("从站地址", frame[0..1], "1~247，每台设备一个"),
+                new("功能码", frame[1..2], Function == 3 ? "03 = 读保持寄存器" : "06 = 写单个寄存器"),
+                new("起始地址", frame[2..4], "大端"),
+                new(Function == 3 ? "数量" : "写入值", frame[4..6], "大端"),
+                new("CRC", frame[6..8], "前 6 字节的 CRC16，低字节在前"),
+            ];
+        }
+    }
+
+    FrameField[] TcpFields => ModbusCodec.BuildTcpRequest(1, (byte)unit, Function, (ushort)address, (ushort)value).Fields;
+
+    const string CrcCode = """
+        static ushort Crc16(ReadOnlySpan<byte> data)
+        {
+            ushort crc = 0xFFFF;
+            foreach (var b in data)
+            {
+                crc ^= b;
+                for (var i = 0; i < 8; i++)
+                    crc = (crc & 1) != 0 ? (ushort)((crc >> 1) ^ 0xA001) : (ushort)(crc >> 1);
+            }
+            return crc;
+        }
+
+        // 写进报文：低字节在前
+        BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(6), Crc16(frame.AsSpan(0, 6)));
+        """;
+}

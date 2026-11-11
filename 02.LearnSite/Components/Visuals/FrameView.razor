@@ -1,0 +1,40 @@
+@*
+    把一帧报文按字段拆开展示：每个字段一个盒子（名字 + 十六进制），下面逐条说明每个字段的意思。
+*@
+@namespace LearnSite.Components.Visuals
+@using LearnSite.Services
+@inherits RuneComponent
+
+<Flex Direction="LayoutDirection.Column" Gap="SpaceScale.Sm">
+    <IconLabel Icon="@Icon">@Title</IconLabel>
+    @if (Fields.Count == 0)
+    {
+        <Paragraph Tone="TextTone.Muted">（还没有）</Paragraph>
+    }
+    else
+    {
+        <Flex Gap="SpaceScale.Sm" Wrap="true">
+            @foreach (var (field, i) in Fields.Select((f, i) => (f, i)))
+            {
+                <Slot @key="@($"{i}{field.Name}{LoopbackTcp.Hex(field.Bytes)}")" Name="@field.Name" Data="@LoopbackTcp.Hex(field.Bytes)" Changed="@Highlight" />
+            }
+        </Flex>
+        <Flex Direction="LayoutDirection.Column" Gap="SpaceScale.Xs">
+            @foreach (var field in Fields)
+            {
+                <Paragraph Tone="TextTone.Muted"><strong>@field.Name</strong>：@field.Note</Paragraph>
+            }
+        </Flex>
+    }
+</Flex>
+
+@code {
+    [Parameter] public string Title { get; set; } = "";
+
+    [Parameter] public IconData Icon { get; set; } = Lucide.Package;
+
+    [Parameter] public IReadOnlyList<FrameField> Fields { get; set; } = [];
+
+    /// <summary>用醒目的颜色（比如应答用另一种颜色，和请求区分）。</summary>
+    [Parameter] public bool Highlight { get; set; }
+}

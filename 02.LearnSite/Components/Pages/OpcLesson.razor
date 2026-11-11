@@ -1,0 +1,186 @@
+@page "/opc"
+@implements IDisposable
+@inherits RuneComponent
+
+@*
+    通信 6：OPC（对应教程 04-上位机通信协议课程 2-x，OPC 客户端示例）。
+    概念为主；演示"轮询"与"订阅（死区）"的差别，用一个不断波动的模拟温度。
+*@
+
+<LessonPage Title="OPC：用统一的方式读各家 PLC">
+    <Intro>
+        不同厂家的 PLC 协议各不相同（西门子 S7、三菱 MC、欧姆龙 FINS……）。如果你的上位机要接 5 个品牌，就得写 5 套通信代码。
+        <strong>OPC</strong> 是一个行业标准：让一个<strong>OPC 服务器</strong>去「翻译」各家的设备（KepServer 就是最常见的），
+        你的上位机只需要学会和 OPC 说话，不管后面接的是什么 PLC。
+    </Intro>
+    <ChildContent>
+        <ConceptGuide>
+            <Concept Term="OPC 服务器与客户端" Analogy="OPC 服务器是一位会很多国语言的翻译，设备各说各话，你只用跟翻译说同一种话。">
+                服务器：装了各家 PLC 的驱动，把点位整理成统一的<strong>地址空间</strong>。客户端：你的上位机，通过标准接口读写。KepServerEX 是最常用的 OPC 服务器软件。
+            </Concept>
+            <Concept Term="OPC DA 与 OPC UA" Analogy="DA 是老式座机，只能在同一栋楼内线连接；UA 是手机，走网络，哪里都能用，还带通话加密。">
+                <strong>OPC DA</strong>：老标准，基于 Windows 的 COM/DCOM，配置麻烦、只能在 Windows 上用。<strong>OPC UA</strong>：新标准，跨平台、走 TCP、自带证书加密与认证，新项目首选。
+            </Concept>
+            <Concept Term="节点（Node）与 NodeId" Analogy="文件夹树里的文件：每个点位像一个文件，路径就是它的唯一地址。">
+                UA 的地址空间是一棵树：<Code>Objects → Plant → Line1 → Temperature</Code>。每个节点有唯一的 <Code>NodeId</Code>，例如 <Code>ns=2;s=Plant.Line1.Temperature</Code>。客户端可以「浏览」这棵树找点位，再读它的值。
+            </Concept>
+            <Concept Term="订阅（Subscription）与死区" Analogy="轮询像每隔几秒打电话问「现在几度？」；订阅像设个闹钟：「温度变化超过 0.5 度才通知我」。">
+                订阅里服务器<strong>自己监视</strong>点位，只有值<strong>变化超过死区（deadband）</strong>才推送给客户端。带宽小、实时性好；而轮询要么太慢（漏掉变化），要么太频繁（浪费）。
+            </Concept>
+        </ConceptGuide>
+
+        <Demo Title="演示：轮询 vs 订阅（死区）">
+            <Stage>
+                <Flex Gap="SpaceScale.Sm" Wrap="true">
+                    <Button Icon="@(running ? Lucide.Pause : Lucide.Play)" @onclick="Toggle">@(running ? "暂停" : "开始")</Button>
+                    <Button Variant="ButtonVariant.Soft" Tone="Tone.Neutral" Icon="Lucide.RotateCcw" @onclick="Reset">重来</Button>
+                </Flex>
+                <Field Label="@($"轮询间隔 {pollMs} 毫秒")"><Slider TValue="int" @bind-Value="pollMs" Min="200" Max="3000" Step="100" /></Field>
+                <Field Label="@($"订阅死区 {deadband:F1} ℃（变化超过这个值才推送）")"><Slider TValue="double" @bind-Value="deadband" Min="0.1" Max="3" Step="0.1" /></Field>
+                <Grid MinItemWidth="CssLength.Rem(11)" Gap="SpaceScale.Sm">
+                    <Slot Name="真实温度" Data="@($"{value:F2} ℃")" Changed="true" />
+                    <Slot Name="运行时间" Data="@($"{tick / 10.0:F1} 秒")" />
+                </Grid>
+                <Paragraph Tone="TextTone.Muted">温度每 0.1 秒随机波动一点点。看两种方式各用了多少次通信、客户端看到的值有多贴近真实。</Paragraph>
+            </Stage>
+            <Side>
+                <Grid MinItemWidth="CssLength.Rem(16)" Gap="SpaceScale.Md">
+                    <Flex Direction="LayoutDirection.Column" Gap="SpaceScale.Xs">
+                        <IconLabel Icon="Lucide.RefreshCw">轮询：每 @(pollMs) 毫秒读一次</IconLabel>
+                        <Slot Name="通信次数" Data="@pollCount.ToString()" />
+                        @foreach (var (line, i) in pollLog.Select((l, i) => (l, i)))
+                        {
+                            <Code @key="@($"p{i}{line}")">@line</Code>
+                        }
+                    </Flex>
+                    <Flex Direction="LayoutDirection.Column" Gap="SpaceScale.Xs">
+                        <IconLabel Icon="Lucide.Bell">订阅：变化超过 @deadband.ToString("F1") ℃ 才推送</IconLabel>
+                        <Slot Name="通信次数" Data="@subCount.ToString()" Changed="true" />
+                        @foreach (var (line, i) in subLog.Select((l, i) => (l, i)))
+                        {
+                            <Code @key="@($"s{i}{line}")">@line</Code>
+                        }
+                    </Flex>
+                </Grid>
+                <Narration Mood="📊">
+                    把死区调大，订阅的通信次数骤降（只在有意义的变化时通知）；把轮询间隔调大，通信少了，但<strong>中间发生的变化就看不到了</strong>。
+                    温度这种缓慢变化的量用订阅很合适；真正需要精确、连续采样的场合，才用固定周期读取。
+                </Narration>
+            </Side>
+        </Demo>
+
+        <Demo Title="用 C# 连 OPC UA（代码要点）">
+            <Stage>
+                <CodeBlock Code="@OpcCode" Lang="csharp" Copyable="false" />
+            </Stage>
+            <Side>
+                <Narration Mood="🧰">
+                    官方库是 <Code>OPCFoundation.NetStandard.Opc.Ua</Code>（NuGet），代码偏长；很多项目会用它做一层简单的封装：<Code>Connect</Code>、<Code>Read(nodeId)</Code>、<Code>Subscribe(nodeId, callback)</Code>。
+                    OPC DA 则用 OpcNetApi 等老库，只能在 Windows 上用，新项目不建议。
+                </Narration>
+                <Quiz Question="新项目要和多个品牌的 PLC 通信，并且要跨平台、带加密，应该选？" Options="@(new[] { "OPC DA", "OPC UA", "直接串口" })" Answer="1"
+                      Explain="OPC UA 是现行标准：跨平台、基于 TCP、自带证书加密与认证。DA 依赖 Windows COM/DCOM，逐渐被淘汰。" />
+            </Side>
+        </Demo>
+
+        <Prose Measure="false">
+            <H2>OPC DA / UA 和 Modbus、S7 怎么选</H2>
+            <table>
+                <thead><tr><th></th><th>Modbus / S7 直连</th><th>OPC（经服务器）</th></tr></thead>
+                <tbody>
+                    <tr><td>优点</td><td>简单、延迟低、不需要额外软件</td><td>统一接口，换设备不改上位机</td></tr>
+                    <tr><td>缺点</td><td>每个品牌写一套，要懂协议细节</td><td>多一个服务器要装、要授权（KepServer 收费）</td></tr>
+                    <tr><td>适合</td><td>设备种类少、追求轻量</td><td>设备多样、已有 OPC 服务器的现场</td></tr>
+                </tbody>
+            </table>
+        </Prose>
+    </ChildContent>
+</LessonPage>
+
+@code {
+    bool running;
+    int pollMs = 1000;
+    double deadband = 0.5;
+    double value = 25.0;
+    double lastPushed = 25.0;
+    int tick;
+    int pollCount;
+    int subCount;
+    readonly List<string> pollLog = [];
+    readonly List<string> subLog = [];
+    CancellationTokenSource? cts;
+
+    void Toggle()
+    {
+        running = !running;
+        if (running) _ = Run((cts = new()).Token);
+        else cts?.Cancel();
+    }
+
+    void Reset()
+    {
+        cts?.Cancel();
+        running = false;
+        value = lastPushed = 25.0;
+        tick = pollCount = subCount = 0;
+        pollLog.Clear();
+        subLog.Clear();
+    }
+
+    async Task Run(CancellationToken token)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(100));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(token))
+            {
+                tick++;
+                value = Math.Round(Math.Clamp(value + (Random.Shared.NextDouble() - 0.5) * 0.6, 15, 40), 2);
+                if (tick * 100 % pollMs == 0)
+                {
+                    pollCount++;
+                    Push(pollLog, $"{tick / 10.0:F1}s → {value:F2} ℃");
+                }
+                if (Math.Abs(value - lastPushed) >= deadband)
+                {
+                    subCount++;
+                    lastPushed = value;
+                    Push(subLog, $"{tick / 10.0:F1}s → {value:F2} ℃");
+                }
+                StateHasChanged();
+            }
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    static void Push(List<string> log, string line)
+    {
+        log.Add(line);
+        if (log.Count > 6) log.RemoveAt(0);
+    }
+
+    const string OpcCode = """
+        // 1. 连接服务器（端点地址由 OPC 服务器给出）
+        var session = await Session.Create(config, endpoint, false, "上位机", 60000, null, null);
+
+        // 2. 读一个点位
+        var value = session.ReadValue(new NodeId("ns=2;s=Plant.Line1.Temperature"));
+        Console.WriteLine(value.Value);
+
+        // 3. 订阅：值变化超过死区才推送
+        var subscription = new Subscription(session.DefaultSubscription) { PublishingInterval = 500 };
+        var item = new MonitoredItem
+        {
+            StartNodeId = "ns=2;s=Plant.Line1.Temperature",
+            SamplingInterval = 200,
+            Filter = new DataChangeFilter { Trigger = DataChangeTrigger.StatusValue,
+                                            DeadbandType = (uint)DeadbandType.Absolute, DeadbandValue = 0.5 },
+        };
+        item.Notification += (_, e) => Console.WriteLine(((MonitoredItemNotification)e.NotificationValue).Value);
+        subscription.AddItem(item);
+        session.AddSubscription(subscription);
+        subscription.Create();
+        """;
+
+    public void Dispose() => cts?.Cancel();
+}
