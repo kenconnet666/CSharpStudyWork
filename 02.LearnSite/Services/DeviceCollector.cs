@@ -1,5 +1,6 @@
 using System.Threading.Channels;
 using LearnSite.Data;
+using Microsoft.Extensions.Logging;
 
 namespace LearnSite.Services;
 
@@ -8,7 +9,7 @@ namespace LearnSite.Services;
 /// 同时判断温度报警，报警的产生与恢复也记进数据库。轮询失败会超时、重试、断线重连（带退避）。
 /// 这是"采集 → 缓冲 → 落库"整条链路的最小版本。
 /// </summary>
-public sealed class DeviceCollector(LearnDb db, ModbusLoopback modbus, long deviceId) : IAsyncDisposable
+public sealed class DeviceCollector(LearnDb db, ModbusLoopback modbus, long deviceId, ILogger<DeviceCollector> logger) : IAsyncDisposable
 {
     const int TrendLength = 60;
 
@@ -40,8 +41,8 @@ public sealed class DeviceCollector(LearnDb db, ModbusLoopback modbus, long devi
     public long Batches { get; private set; }
     public int LastBatchSize { get; private set; }
 
-    /// <summary>当前报警级别："none" / "warning" / "danger"。</summary>
-    public string AlarmLevel { get; private set; } = "none";
+    /// <summary>当前报警级别。</summary>
+    public AlarmLevel AlarmLevel { get; private set; }
 
     /// <summary>状态变了（在后台线程触发，界面用 InvokeAsync 切回 UI 线程）。</summary>
     public event Action? Changed;
@@ -56,6 +57,7 @@ public sealed class DeviceCollector(LearnDb db, ModbusLoopback modbus, long devi
         if (cts is not null) return;
         cts = new CancellationTokenSource();
         State = "运行中";
+        logger.LogInformation("采集启动：设备 {DeviceId}，轮询间隔 {PollMs} 毫秒，批量写入间隔 {BatchMs} 毫秒", deviceId, PollInterval.TotalMilliseconds, BatchInterval.TotalMilliseconds);
         pollTask = PollLoop(cts.Token);
         writeTask = WriteLoop(cts.Token);
         Changed?.Invoke();
@@ -69,6 +71,7 @@ public sealed class DeviceCollector(LearnDb db, ModbusLoopback modbus, long devi
         cts.Dispose();
         cts = null;
         State = "已停止";
+        logger.LogInformation("采集停止：共轮询 {Polled} 次，写入 {Written} 条", Polled, Written);
         Changed?.Invoke();
     }
 
@@ -100,6 +103,7 @@ public sealed class DeviceCollector(LearnDb db, ModbusLoopback modbus, long devi
             Failures = 0;
             State = "运行中";
             Polled++;
+            logger.LogDebug("读到 温度 {Temperature} ℃，压力 {Pressure} kPa", Temperature, Pressure);
 
             lock (gate)
             {
@@ -113,6 +117,7 @@ public sealed class DeviceCollector(LearnDb db, ModbusLoopback modbus, long devi
         catch (Exception ex) when (ex is OperationCanceledException && !token.IsCancellationRequested || ex is IOException)
         {
             Failures++;
+            logger.LogWarning("读取设备 {DeviceId} 超时，连续第 {Failures} 次", deviceId, Failures);
             State = Failures >= 3 ? "重连中" : "超时重试";
             Changed?.Invoke();
             if (Failures >= 3) await ReconnectAsync(token);
@@ -124,8 +129,11 @@ public sealed class DeviceCollector(LearnDb db, ModbusLoopback modbus, long devi
     async Task ReconnectAsync(CancellationToken token)
     {
         var wait = 1;
+        var attempts = 0;
+        logger.LogWarning("连续 {Failures} 次失败，判定设备 {DeviceId} 断线，开始重连", Failures, deviceId);
         while (!token.IsCancellationRequested)
         {
+            attempts++;
             modbus.Disconnect();
             try
             {
@@ -135,10 +143,12 @@ public sealed class DeviceCollector(LearnDb db, ModbusLoopback modbus, long devi
                 await modbus.RequestAsync(frame, TimeSpan.FromMilliseconds(600));
                 Failures = 0;
                 State = "运行中";
+                logger.LogInformation("设备 {DeviceId} 重连成功，尝试了 {Attempts} 次", deviceId, attempts);
                 return;
             }
             catch (Exception ex) when (ex is OperationCanceledException or IOException or System.Net.Sockets.SocketException)
             {
+                logger.LogWarning("第 {Attempts} 次重连失败，{Wait} 秒后再试：{Reason}", attempts, wait, ex.Message);
                 State = $"重连中（{wait} 秒后再试）";
                 Changed?.Invoke();
                 await Task.Delay(TimeSpan.FromSeconds(wait), token);
@@ -182,38 +192,40 @@ public sealed class DeviceCollector(LearnDb db, ModbusLoopback modbus, long devi
         while (queue.Reader.TryRead(out var reading)) batch.Add(reading);
         if (batch.Count == 0) return;
         Interlocked.Add(ref queued, -batch.Count);
+        var watch = System.Diagnostics.Stopwatch.StartNew();
         await db.Db.Insert(batch).Batch().ExecuteAsync();
+        logger.LogDebug("批量写入 {Count} 条，耗时 {Elapsed:F1} 毫秒", batch.Count, watch.Elapsed.TotalMilliseconds);
         Written += batch.Count;
         Batches++;
         LastBatchSize = batch.Count;
         Changed?.Invoke();
     }
 
-    // ---- 报警：超限产生、回落到阈值以下 2 度才恢复（滞回，避免在阈值附近反复报警）----
+    // ---- 报警：判断交给 AlarmEvaluator（纯逻辑，有单元测试），这里只负责把报警的产生与恢复写进数据库 ----
     async Task EvaluateAlarmAsync(double temperature, DateTime now)
     {
-        var level = temperature >= DangerAt ? "danger"
-            : temperature >= WarnAt ? "warning"
-            : AlarmLevel != "none" && temperature >= WarnAt - 2 ? AlarmLevel   // 还没降到恢复线以下，维持原级别
-            : "none";
+        var level = new AlarmEvaluator(WarnAt, DangerAt).Evaluate(temperature, AlarmLevel);
         if (level == AlarmLevel) return;
 
         if (activeAlarmId is { } id)
         {
             await db.Db.Update<Alarm>().Set(a => a.ClearedAt, (DateTime?)now).Where(a => a.Id == id).ExecuteAsync();
+            logger.LogInformation("报警 {AlarmId} 结束（温度 {Temperature} ℃）", id, temperature);
             activeAlarmId = null;
         }
-        if (level != "none")
+        if (level != AlarmLevel.None)
         {
             var alarm = new Alarm
             {
                 DeviceId = deviceId,
-                Level = level,
-                Message = level == "danger" ? $"温度 {temperature:F1} ℃ 超过危险线 {DangerAt:F0} ℃" : $"温度 {temperature:F1} ℃ 超过预警线 {WarnAt:F0} ℃",
+                Level = level == AlarmLevel.Danger ? "danger" : "warning",
+                Message = level == AlarmLevel.Danger ? $"温度 {temperature:F1} ℃ 超过危险线 {DangerAt:F0} ℃" : $"温度 {temperature:F1} ℃ 超过预警线 {WarnAt:F0} ℃",
                 RaisedAt = now,
             };
             await db.Db.Insert(alarm).FillGeneratedKeys().ExecuteAsync();
             activeAlarmId = alarm.Id;
+            if (level == AlarmLevel.Danger) logger.LogError("危险报警：设备 {DeviceId} 温度 {Temperature} ℃ 超过危险线 {DangerAt} ℃", deviceId, temperature, DangerAt);
+            else logger.LogWarning("预警：设备 {DeviceId} 温度 {Temperature} ℃ 超过预警线 {WarnAt} ℃", deviceId, temperature, WarnAt);
         }
         AlarmLevel = level;
     }

@@ -1,4 +1,5 @@
 using LearnSite.Data;
+using Microsoft.Extensions.Logging;
 
 namespace LearnSite.Services;
 
@@ -8,11 +9,11 @@ namespace LearnSite.Services;
 /// </summary>
 public sealed class SimulatedPlant : IAsyncDisposable
 {
-    public SimulatedPlant(LearnDb db, long deviceId = 1)
+    public SimulatedPlant(LearnDb db, ILogger<DeviceCollector> logger, long deviceId = 1)
     {
         Modbus.StartServer();
         Simulator = new DeviceSimulator(Modbus.Device);
-        Collector = new DeviceCollector(db, Modbus, deviceId);
+        Collector = new DeviceCollector(db, Modbus, deviceId, logger);
     }
 
     public ModbusLoopback Modbus { get; } = new();

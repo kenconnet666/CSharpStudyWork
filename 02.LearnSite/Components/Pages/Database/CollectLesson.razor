@@ -4,6 +4,7 @@
 @implements IAsyncDisposable
 @inherits RuneComponent
 @inject LearnDb Db
+@inject Microsoft.Extensions.Logging.ILogger<DeviceCollector> CollectorLog
 
 @*
     数据 4：采集数据怎么落库——轮询 → Channel 队列 → 批量写入。设备是本机模拟的真实 Modbus TCP 设备，数据真的写进 PostgreSQL。
@@ -93,7 +94,7 @@
     protected override void OnInitialized()
     {
         // 示例设备按顺序建，第一台的 id 是 1；采集器只在库就绪后才会用到数据库
-        plant = new SimulatedPlant(Db);
+        plant = new SimulatedPlant(Db, CollectorLog);
         collector = plant.Collector;
         collector.Changed += OnCollectorChanged;
         ApplySettings();

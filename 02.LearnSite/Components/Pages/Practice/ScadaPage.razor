@@ -4,6 +4,7 @@
 @implements IAsyncDisposable
 @inherits RuneComponent
 @inject LearnDb Db
+@inject Microsoft.Extensions.Logging.ILogger<DeviceCollector> CollectorLog
 
 @*
     综合实战：迷你上位机。把前面学的全部串起来——
@@ -43,7 +44,7 @@
                         </Flex>
                     </Alert>
                     <Grid MinItemWidth="CssLength.Rem(10)" Gap="SpaceScale.Sm">
-                        <Slot Name="温度" Data="@(collector.Temperature is { } t ? $"{t:F1} ℃" : "—")" Changed="@(collector.AlarmLevel != "none")" />
+                        <Slot Name="温度" Data="@(collector.Temperature is { } t ? $"{t:F1} ℃" : "—")" Changed="@(collector.AlarmLevel != AlarmLevel.None)" />
                         <Slot Name="压力" Data="@(collector.Pressure is { } p ? $"{p:F0} kPa" : "—")" />
                         <Slot Name="已轮询" Data="@collector.Polled.ToString()" />
                         <Slot Name="入库 / 队列" Data="@($"{collector.Written} / {collector.Queued}")" />
@@ -106,6 +107,19 @@
                 </Side>
             </Demo>
 
+            @* ---------- 运行日志 ---------- *@
+            <Demo Title="运行日志：断线、重连、报警都记下来了">
+                <Stage>
+                    <LogView Count="10" Title="最近的运行日志（Information 以上）" />
+                </Stage>
+                <Side>
+                    <Narration Mood="📄">
+                        每次超时、判定断线、重连、报警产生与恢复、停止采集，都用 <Code>ILogger</Code> 记了一条，同时写进了磁盘上按天滚动的日志文件。
+                        到「<a href="logging">日志</a>」一课把级别调到 Debug，还能看到每次轮询读到的值和每批写库的耗时。
+                    </Narration>
+                </Side>
+            </Demo>
+
             <Demo Title="这页用到的东西，分别来自哪一课">
                 <Stage>
                     <Prose Measure="false">
@@ -158,7 +172,7 @@
 
     protected override void OnInitialized()
     {
-        plant = new SimulatedPlant(Db);
+        plant = new SimulatedPlant(Db, CollectorLog);
         collector = plant.Collector;
         collector.Changed += OnCollectorChanged;
         ApplySettings();
@@ -245,14 +259,14 @@
         await RefreshHistory();
     }
 
-    Tone AlarmTone => collector.AlarmLevel switch { "danger" => Tone.Danger, "warning" => Tone.Warning, _ => Tone.Success };
+    Tone AlarmTone => collector.AlarmLevel switch { AlarmLevel.Danger => Tone.Danger, AlarmLevel.Warning => Tone.Warning, _ => Tone.Success };
 
-    IconData AlarmIcon => collector.AlarmLevel switch { "danger" => Lucide.Siren, "warning" => Lucide.TriangleExclamationPoint, _ => Lucide.CircleCheck };
+    IconData AlarmIcon => collector.AlarmLevel switch { AlarmLevel.Danger => Lucide.Siren, AlarmLevel.Warning => Lucide.TriangleExclamationPoint, _ => Lucide.CircleCheck };
 
     string AlarmText => (collector.AlarmLevel, collector.Temperature) switch
     {
-        ("danger", { } t) => $"危险报警：温度 {t:F1} ℃，超过危险线 {collector.DangerAt:F0} ℃",
-        ("warning", { } t) => $"预警：温度 {t:F1} ℃，超过预警线 {collector.WarnAt:F0} ℃",
+        (AlarmLevel.Danger, { } t) => $"危险报警：温度 {t:F1} ℃，超过危险线 {collector.DangerAt:F0} ℃",
+        (AlarmLevel.Warning, { } t) => $"预警：温度 {t:F1} ℃，超过预警线 {collector.WarnAt:F0} ℃",
         (_, { } t) => $"运行正常：温度 {t:F1} ℃",
         _ => "还没有数据：点“开始采集”",
     };

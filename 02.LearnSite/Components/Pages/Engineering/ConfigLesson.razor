@@ -1,0 +1,279 @@
+@page "/di"
+@using System.Text
+@using LearnSite.Services
+@using Microsoft.Extensions.Configuration
+@using Microsoft.Extensions.DependencyInjection
+@inherits RuneComponent
+
+@*
+    工程化 1：配置与依赖注入。演示 1：JSON 配置 → 强类型对象，多个配置源叠加；演示 2：服务的生命周期；演示 3：依赖接口，换实现不改业务代码。
+    用的是真正的 Microsoft.Extensions.Configuration 和 DependencyInjection，和 ASP.NET Core、WPF、MAUI 项目里用的是同一套。
+*@
+
+<LessonPage Title="配置与依赖注入：别把设备地址写死在代码里">
+    <Intro>
+        前面的代码里，设备地址、阈值、轮询间隔都是写在代码里的。真实项目换一个现场就要改一遍、重新编译。工程上的做法是：
+        <strong>配置放在文件里</strong>（想改就改文件），<strong>对象之间的依赖由容器统一装配</strong>（想换实现就换一行注册）。这两件事是几乎所有 .NET 项目的标配。
+    </Intro>
+    <ChildContent>
+        <ConceptGuide>
+            <Concept Term="配置（Configuration）" Analogy="设备的铭牌或设置面板：参数写在外面，不用拆开机器改电路。" Compare="相当于 Spring 的 application.yml，或 Node 项目里的 .env / config.json。">
+                配置源可以叠加：<Code>appsettings.json</Code> 放默认值，环境变量或命令行参数可以<strong>覆盖</strong>其中某几项。同一个程序，开发机和现场用不同的配置，代码一个字不改。
+            </Concept>
+            <Concept Term="强类型配置（绑定）" Analogy="把填好的登记表录入成一个结构化的对象，之后代码里读 options.Alarm.WarnAt，而不是到处写字符串键名。">
+                <Code>config.Get&lt;PlantOptions&gt;()</Code> 把配置的键名自动对应到类的属性。写错键名、类型不对，早早就能发现；属性的默认值就是「没配置时用什么」。
+            </Concept>
+            <Concept Term="依赖注入（DI）" Analogy="工厂的装配线：你只说「我要一台能报警的设备」，装配线自己把传感器、配置、日志这些零件装好送来，你不用自己去找、自己去拧。" Compare="和 Spring 的自动注入（Autowired）是同一个思想；C# 里主要通过构造函数参数注入。">
+                类需要什么就在<strong>构造函数</strong>里声明（<Code>AlarmService(IDeviceReader reader, ...)</Code>），容器负责创建并传入。好处：想换一个实现（真设备换成模拟设备、测试时换成假设备），只改注册，业务代码不动。
+            </Concept>
+            <Concept Term="生命周期：Transient / Scoped / Singleton" Analogy="Transient 是一次性纸杯，每次都给新的；Scoped 是一场会议里共用的白板，会议结束就换；Singleton 是公司的前台，全公司只有一个。">
+                <strong>Transient</strong>：每次请求都新建；<strong>Scoped</strong>：同一个作用域（比如一次请求、一个页面）内共用一个；<strong>Singleton</strong>：整个程序只有一个。数据库连接池、配置、日志通常是 Singleton；带状态的、跟页面绑定的用 Scoped。
+            </Concept>
+        </ConceptGuide>
+
+        <Demo Title="演示 1：JSON 配置 → 强类型对象（可以改 JSON 试试）">
+            <Stage>
+                <Field Label="appsettings.json">
+                    <Textarea @bind-Value="json" @bind-Value:after="Bind" Rows="14" />
+                </Field>
+                <Switch @bind-Value="envOverride" @bind-Value:after="Bind">叠加一个「环境变量」配置源：Alarm__WarnAt=65</Switch>
+            </Stage>
+            <Side>
+                @if (bindError is not null)
+                {
+                    <Alert Tone="Tone.Danger" Icon="Lucide.CircleX" Label="配置有问题">@bindError</Alert>
+                }
+                else if (options is not null)
+                {
+                    <Grid MinItemWidth="CssLength.Rem(11)" Gap="SpaceScale.Sm">
+                        <Slot Name="Device.Host" Data="@options.Device.Host" />
+                        <Slot Name="Device.Port" Data="@options.Device.Port.ToString()" />
+                        <Slot Name="Device.PollMs" Data="@options.Device.PollMs.ToString()" />
+                        <Slot Name="Alarm.WarnAt" Data="@options.Alarm.WarnAt.ToString()" Changed="@envOverride" />
+                        <Slot Name="Alarm.DangerAt" Data="@options.Alarm.DangerAt.ToString()" />
+                        <Slot Name="Tags" Data="@string.Join(", ", options.Tags)" />
+                    </Grid>
+                    <IconLabel Icon="Lucide.Layers">每一项最后来自哪个配置源（GetDebugView）</IconLabel>
+                    <CodeBlock Code="@debugView" Lang="text" Copyable="false" />
+                }
+                <Narration @key="@($"{envOverride}{bindError}")" Mood="@(bindError is null ? "🧩" : "🚨")">
+                    @if (bindError is not null)
+                    {
+                        <text>配置在<strong>启动时就检查</strong>（<Code>Validate()</Code>）：预警线必须小于危险线、端口要在范围内……错了立刻报错并指出是哪一项，而不是等到现场运行了一半才出怪事。试着把 WarnAt 改得比 DangerAt 大。</text>
+                    }
+                    else if (envOverride)
+                    {
+                        <text>两个配置源叠加：<strong>后加入的覆盖先加入的</strong>。JSON 里 WarnAt 是 70，「环境变量」源把它改成 65，下面的来源标注显示最后生效的是内存/环境变量源。其他没被覆盖的项仍来自 JSON。</text>
+                    }
+                    else
+                    {
+                        <text>试试删掉某一项（比如 PollMs）：绑定后它会用类里写的<strong>默认值</strong>（500），不会报错。也可以勾上上面的开关，看覆盖是怎么生效的。</text>
+                    }
+                </Narration>
+                <CodeBlock Code="@BindCode" Lang="csharp" Copyable="false" />
+            </Side>
+        </Demo>
+
+        <Demo Title="演示 2：生命周期——同一个服务，每次拿到的是不是同一个对象？">
+            <Stage>
+                <ToggleGroup @bind-Value="lifetime" @bind-Value:after="ResetLifetime" Required="true" aria-label="生命周期">
+                    <ToggleItem Value="Transient">Transient（每次新建）</ToggleItem>
+                    <ToggleItem Value="Scoped">Scoped（作用域内共用）</ToggleItem>
+                    <ToggleItem Value="Singleton">Singleton（全局唯一）</ToggleItem>
+                </ToggleGroup>
+                <Flex Gap="SpaceScale.Sm" Wrap="true">
+                    <Button Icon="Lucide.Plus" @onclick="AddScope">新建一个作用域，里面取 2 次</Button>
+                    <Button Variant="ButtonVariant.Ghost" Tone="Tone.Neutral" Icon="Lucide.RotateCcw" @onclick="ResetLifetime">清空</Button>
+                </Flex>
+                <CodeBlock Code="@LifetimeCode" Lang="csharp" Copyable="false" />
+            </Stage>
+            <Side>
+                <Table Density="TableDensity.Compact" Striped="true" aria-label="每次取到的对象编号">
+                    <TableHead>
+                        <TableRow>
+                            <TableHeaderCell>作用域</TableHeaderCell>
+                            <TableHeaderCell>第 1 次取到</TableHeaderCell>
+                            <TableHeaderCell>第 2 次取到</TableHeaderCell>
+                        </TableRow>
+                    </TableHead>
+                    <TableBody>
+                        @foreach (var row in scopeRows)
+                        {
+                            <TableRow @key="row.Name">
+                                <TableCell>@row.Name</TableCell>
+                                <TableCell><Code>@row.First</Code></TableCell>
+                                <TableCell><Code>@row.Second</Code></TableCell>
+                            </TableRow>
+                        }
+                    </TableBody>
+                </Table>
+                <Narration @key="@($"{lifetime}{scopeRows.Count}")" Mood="🔬">@((MarkupString)LifetimeNote)</Narration>
+            </Side>
+        </Demo>
+
+        <Demo Title="演示 3：依赖接口——换实现，业务代码一行不改">
+            <Stage>
+                <Paragraph Tone="TextTone.Muted">AlarmService 只依赖「读设备」这个接口。选一个实现注册进容器，再点检查：</Paragraph>
+                <ToggleGroup @bind-Value="readerKey" Required="true" aria-label="读设备的实现">
+                    <ToggleItem Value="fake90">假设备（固定 90 ℃）</ToggleItem>
+                    <ToggleItem Value="fake50">假设备（固定 50 ℃）</ToggleItem>
+                    <ToggleItem Value="modbus">Modbus 模拟设备（走一遍报文编解码）</ToggleItem>
+                </ToggleGroup>
+                <Flex Gap="SpaceScale.Sm" Wrap="true">
+                    <Button Icon="Lucide.ShieldCheck" @onclick="CheckAlarm">检查报警</Button>
+                </Flex>
+                <Slot Name="检查结果" Data="@checkResult" Changed="@(checkResult != "—")" />
+                <CodeBlock Code="@DiCode" Lang="csharp" Copyable="false" />
+            </Stage>
+            <Side>
+                <Narration Mood="🧰">
+                    <Code>AlarmService</Code> 的代码没有出现任何具体设备的名字，它只知道 <Code>IDeviceReader</Code>。<strong>真实项目里</strong>注册真实的 Modbus 客户端；<strong>写单元测试时</strong>注册 <Code>FakeReader</Code>（下一课就这么用）；
+                    想先在没有硬件的电脑上演示，注册模拟设备。三种场景，业务代码完全一样。
+                </Narration>
+                <Quiz Question="一个类里写 new ModbusClient()，和通过构造函数接收 IDeviceReader，最大的区别是？" Options="@(new[] { "前者更快", "前者把自己和具体实现绑死了：没法换成模拟设备，也没法写不连设备的测试", "两者没有区别" })" Answer="1"
+                      Explain="自己 new 具体类，就意味着要用这个类就必须连真设备。通过接口注入，换实现、写测试都很容易。这是依赖注入真正的价值，而不是「容器帮我 new」。" />
+            </Side>
+        </Demo>
+    </ChildContent>
+</LessonPage>
+
+@code {
+    // ---- 演示 1：配置绑定 ----
+    string json = """
+        {
+          "Device": { "Host": "192.168.1.20", "Port": 502, "PollMs": 500 },
+          "Alarm": { "WarnAt": 70, "DangerAt": 85 },
+          "Tags": [ "temperature", "pressure" ]
+        }
+        """;
+
+    bool envOverride;
+    PlantOptions? options;
+    string? bindError;
+    string debugView = "";
+
+    protected override void OnInitialized() => Bind();
+
+    void Bind()
+    {
+        try
+        {
+            var builder = new ConfigurationBuilder().AddJsonStream(new MemoryStream(Encoding.UTF8.GetBytes(json)));
+            if (envOverride) builder.AddInMemoryCollection(new Dictionary<string, string?> { ["Alarm:WarnAt"] = "65" });   // 环境变量 Alarm__WarnAt 会变成这样的键
+            var config = builder.Build();
+            options = config.Get<PlantOptions>() ?? new PlantOptions();
+            bindError = options.Validate();
+            debugView = string.Join('\n', config.GetDebugView().Split('\n').Where(l => l.Contains('=')).Select(l => l.Trim()));
+        }
+        catch (Exception ex) when (ex is System.Text.Json.JsonException or FormatException or InvalidOperationException)
+        {
+            options = null;
+            bindError = "JSON 格式不对：" + ex.Message;
+        }
+    }
+
+    string BindCode => """
+        var config = new ConfigurationBuilder()
+            .AddJsonFile("appsettings.json")                 // 默认值
+            .AddEnvironmentVariables()                       // 后加入的覆盖先加入的
+            .Build();
+
+        var options = config.Get<PlantOptions>() ?? new();
+        if (options.Validate() is { } problem) throw new InvalidOperationException(problem);   // 启动时就检查
+        """;
+
+    // ---- 演示 2：生命周期 ----
+    sealed class Counter
+    {
+        public string Id { get; } = Guid.NewGuid().ToString("N")[..4];
+    }
+
+    sealed record ScopeRow(string Name, string First, string Second);
+
+    string lifetime = "Transient";
+    ServiceProvider? provider;
+    readonly List<ScopeRow> scopeRows = [];
+
+    ServiceProvider Provider
+    {
+        get
+        {
+            if (provider is not null) return provider;
+            var services = new ServiceCollection();
+            switch (lifetime)
+            {
+                case "Transient": services.AddTransient<Counter>(); break;
+                case "Scoped": services.AddScoped<Counter>(); break;
+                default: services.AddSingleton<Counter>(); break;
+            }
+            return provider = services.BuildServiceProvider();
+        }
+    }
+
+    void AddScope()
+    {
+        using var scope = Provider.CreateScope();
+        var first = scope.ServiceProvider.GetRequiredService<Counter>().Id;
+        var second = scope.ServiceProvider.GetRequiredService<Counter>().Id;
+        scopeRows.Add(new ScopeRow($"作用域 {scopeRows.Count + 1}", first, second));
+    }
+
+    void ResetLifetime()
+    {
+        provider?.Dispose();
+        provider = null;
+        scopeRows.Clear();
+    }
+
+    string LifetimeCode => $$"""
+        services.Add{{lifetime}}<Counter>();
+        var provider = services.BuildServiceProvider();
+
+        using var scope = provider.CreateScope();
+        var a = scope.ServiceProvider.GetRequiredService<Counter>();
+        var b = scope.ServiceProvider.GetRequiredService<Counter>();   // a 和 b 是同一个吗？
+        """;
+
+    string LifetimeNote => lifetime switch
+    {
+        "Transient" => "<strong>Transient</strong>：每一行的两次取到的编号都<strong>不一样</strong>，每次 <code>GetRequiredService</code> 都新建一个。多点几次，所有编号都不重复。",
+        "Scoped" => "<strong>Scoped</strong>：同一行里两次取到的<strong>是同一个</strong>（编号相同），换一个作用域就是新对象。网页应用里「一次请求」就是一个作用域。",
+        _ => "<strong>Singleton</strong>：不管第几个作用域、第几次取，编号<strong>永远是同一个</strong>，整个程序只有它一个。适合配置、连接池这类全局共用的东西。",
+    };
+
+    // ---- 演示 3：依赖接口 ----
+    string readerKey = "fake90";
+    string checkResult = "—";
+
+    async Task CheckAlarm()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton(new AlarmOptions { WarnAt = 70, DangerAt = 85 });
+        switch (readerKey)
+        {
+            case "fake90": services.AddSingleton<IDeviceReader>(new FakeReader(90)); break;
+            case "fake50": services.AddSingleton<IDeviceReader>(new FakeReader(50)); break;
+            default:
+                var device = new ModbusDevice();
+                device.Registers[0] = 780;   // 78.0 ℃
+                services.AddSingleton<IDeviceReader>(new ModbusReader(device));
+                break;
+        }
+        services.AddTransient<AlarmService>();
+
+        await using var container = services.BuildServiceProvider();
+        var (temperature, level) = await container.GetRequiredService<AlarmService>().CheckAsync();
+        checkResult = $"{temperature:F1} ℃ → {level switch { AlarmLevel.Danger => "危险", AlarmLevel.Warning => "预警", _ => "正常" }}";
+    }
+
+    string DiCode => $$"""
+        // AlarmService 的构造函数声明它需要什么
+        public AlarmService(IDeviceReader reader, AlarmOptions options) { ... }
+
+        // 装配：想换实现，只改这一处
+        services.AddSingleton<IDeviceReader>({{readerKey switch { "fake90" => "new FakeReader(90)", "fake50" => "new FakeReader(50)", _ => "new ModbusReader(device)" }}});
+        services.AddTransient<AlarmService>();
+
+        var (temperature, level) = await provider.GetRequiredService<AlarmService>().CheckAsync();
+        """;
+}

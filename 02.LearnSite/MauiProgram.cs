@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Components.WebView.Maui;
 using Rune.Desktop;
+using LearnSite.Logging;
 using Rune.UI;
 
 namespace LearnSite;
@@ -20,6 +21,7 @@ public static class MauiProgram
 #endif
         builder.Services.AddRuneUI(o => o.ThemeChoices = ThemeChoices.Builtin);
         builder.Services.AddSingleton<Data.LearnDb>();
+        builder.Services.AddLearnSiteLogging();
         return builder.Build();
     }
 }

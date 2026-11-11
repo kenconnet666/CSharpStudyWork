@@ -1,0 +1,169 @@
+@page "/logging"
+@using LearnSite.Logging
+@using Microsoft.Extensions.Logging
+@using Serilog.Core
+@using Serilog.Events
+@inherits RuneComponent
+@inject ILogger<LoggingLesson> Log
+@inject LoggingLevelSwitch LevelSwitch
+@inject MemoryLogSink Sink
+
+@*
+    工程化 2：日志。真实的 Serilog：同时写按天滚动的文件和内存（页面上显示）。
+    演示 1：日志级别；演示 2：结构化日志 vs 字符串拼接；演示 3：日志文件。
+*@
+
+<LessonPage Title="日志：现场出了问题，靠它还原现场">
+    <Intro>
+        上位机装到现场以后，你不在旁边。设备掉线、数据异常、报警漏报，唯一能还原当时发生了什么的，就是<strong>日志</strong>。
+        <Code>Console.WriteLine</Code> 在现场没人看，而且停电重启后就没了。真正的日志要有<strong>级别</strong>、<strong>时间</strong>、<strong>结构化的内容</strong>，并且<strong>写进文件</strong>。
+    </Intro>
+    <ChildContent>
+        <ConceptGuide>
+            <Concept Term="日志级别" Analogy="事件的紧急程度：Debug 是备忘笔记，Information 是日常记录，Warning 是「有点不对劲」，Error 是「出事了」。" Compare="和 Java 的 SLF4J / Log4j 的级别一致：DEBUG / INFO / WARN / ERROR。">
+                常用级别从低到高：<Code>Debug</Code> 开发时看细节 → <Code>Information</Code> 正常流程里程碑 → <Code>Warning</Code> 异常但能继续（超时重试）→ <Code>Error</Code> 失败了（写库出错、危险报警）。
+                运行时设一个<strong>最小级别</strong>，低于它的不记。平时 Information，排查问题时临时调到 Debug。
+            </Concept>
+            <Concept Term="ILogger 与 Serilog" Analogy="ILogger 是墙上的标准插座，Serilog 是插在后面的具体电器：业务代码只认插座，后面换成什么都行。">
+                业务代码只依赖 <Code>ILogger&lt;T&gt;</Code>（Microsoft 的标准接口，通过依赖注入拿到）；背后用 Serilog 决定日志写到哪里：文件、控制台、内存、日志服务器……换输出不改业务代码。
+            </Concept>
+            <Concept Term="结构化日志" Analogy="填表和写作文的区别：作文里「温度 78」是一段文字，只能靠人眼找；表格里「温度」是单独的一列，可以按它筛选、统计。">
+                写 <Code>LogInformation("温度 {Temperature} ℃", t)</Code>，而不是字符串拼接 <Code>$"温度 {t} ℃"</Code>。前者保留了 <Code>Temperature</Code> 这个<strong>字段</strong>，之后可以导入日志系统按字段查询（比如「温度大于 85 的所有记录」）；后者只剩一段死文字。
+            </Concept>
+            <Concept Term="滚动与保留" Analogy="日志像流水账本：每天换一本，只保留最近一周的，旧的扔掉，不然硬盘迟早被写满。">
+                <Code>RollingInterval.Day</Code> 每天一个文件（<Code>learnsite-20261111.log</Code>），<Code>retainedFileCountLimit: 7</Code> 只留 7 个。长期运行的上位机必须配这个，否则日志文件会无限增长，把工控机的硬盘写满。
+            </Concept>
+        </ConceptGuide>
+
+        <Demo Title="演示 1：日志级别——调整最小级别，看哪些日志被过滤">
+            <Stage>
+                <Paragraph Tone="TextTone.Muted">最小级别（低于它的日志直接丢弃）：</Paragraph>
+                <ToggleGroup @bind-Value="levelKey" @bind-Value:after="ApplyLevel" Required="true" aria-label="最小级别">
+                    <ToggleItem Value="Debug">Debug</ToggleItem>
+                    <ToggleItem Value="Information">Information</ToggleItem>
+                    <ToggleItem Value="Warning">Warning</ToggleItem>
+                    <ToggleItem Value="Error">Error</ToggleItem>
+                </ToggleGroup>
+                <Paragraph Tone="TextTone.Muted">各记一条（每个按钮对应一个级别）：</Paragraph>
+                <Flex Gap="SpaceScale.Sm" Wrap="true">
+                    <Button Variant="ButtonVariant.Soft" Tone="Tone.Neutral" Icon="Lucide.Bug" @onclick="LogDebug">Debug：读到寄存器值</Button>
+                    <Button Variant="ButtonVariant.Soft" Tone="Tone.Info" Icon="Lucide.Info" @onclick="LogInfo">Information：连接成功</Button>
+                    <Button Variant="ButtonVariant.Soft" Tone="Tone.Warning" Icon="Lucide.TriangleExclamationPoint" @onclick="LogWarning">Warning：读取超时</Button>
+                    <Button Variant="ButtonVariant.Soft" Tone="Tone.Danger" Icon="Lucide.CircleX" @onclick="LogError">Error：写库失败（带异常）</Button>
+                </Flex>
+                <CodeBlock Code="@LevelCode" Lang="csharp" Copyable="false" />
+            </Stage>
+            <Side>
+                <LogView Count="6" />
+                <Narration @key="levelKey" Mood="🎛">
+                    当前最小级别是 <strong>@levelKey</strong>：低于它的按钮点了<strong>没有任何日志出现</strong>（连文件里也没有）。
+                    现场平时用 Information；要查某个问题时，把级别调到 Debug（上位机设置里通常有这个开关），问题复现后再调回来，因为 Debug 日志量很大。
+                </Narration>
+            </Side>
+        </Demo>
+
+        <Demo Title="演示 2：结构化日志——保留的字段 vs 一段死文字">
+            <Stage>
+                <Field Label="@($"温度 {temperature} ℃")"><Slider TValue="int" @bind-Value="temperature" Min="20" Max="110" /></Field>
+                <Flex Gap="SpaceScale.Sm" Wrap="true">
+                    <Button Icon="Lucide.Equal" Variant="ButtonVariant.Soft" Tone="Tone.Neutral" @onclick="LogConcat">用字符串拼接记一条</Button>
+                    <Button Icon="Lucide.Braces" @onclick="LogStructured">用结构化模板记一条</Button>
+                </Flex>
+                <CodeBlock Code="@StructuredCode" Lang="csharp" Copyable="false" />
+            </Stage>
+            <Side>
+                <LogView Count="4" Title="对比两条日志的「属性」" />
+                <Narration Mood="🔬">
+                    两条日志的文字看起来一样，但看每条下面的<strong>属性</strong>：拼接那条<strong>没有属性</strong>，温度只是文字里的几个字符；结构化那条有 <Code>Temperature = @temperature</Code> 和 <Code>DeviceId</Code> 两个独立的字段。
+                    日志多了以后，你可以说「找出 Temperature 大于 85 的所有记录」，只有后者能做到。而且模板是同一个，大量重复的日志还能按模板聚合。
+                </Narration>
+            </Side>
+        </Demo>
+
+        <Demo Title="演示 3：日志文件——写在磁盘上，重启也不丢">
+            <Stage>
+                <Slot Name="日志目录" Data="@LoggingSetup.LogDirectory" />
+                <Flex Gap="SpaceScale.Sm" Wrap="true">
+                    <Button Icon="Lucide.RefreshCw" Variant="ButtonVariant.Soft" Tone="Tone.Neutral" @onclick="RefreshFile">读取今天日志文件的最后几行</Button>
+                </Flex>
+                <CodeBlock Code="@SetupCode" Lang="csharp" Copyable="false" />
+            </Stage>
+            <Side>
+                <IconLabel Icon="Lucide.FileText">今天的日志文件（最后 10 行）</IconLabel>
+                <CodeBlock Code="@fileTail" Lang="text" Copyable="false" />
+                <Narration Mood="📄">
+                    在上面演示里记的日志，也一条条写进了这个文件，格式是「时间 [级别] 来源: 内容 {属性}」。
+                    到「<a href="scada">综合实战</a>」里让设备断线、重连、报警，文件里会留下完整的前因后果——<strong>这就是现场排错的依据</strong>。
+                </Narration>
+            </Side>
+        </Demo>
+
+        <Quiz Question="温度很多次超限，每次都用 Error 级别记日志，有什么问题？" Options="@(new[] { "没问题，越严重越要记", "日志满屏都是 Error，真正的 Error 被淹没；预警应该用 Warning，Error 留给真正的失败", "Error 级别不能写进文件" })" Answer="1"
+              Explain="级别是用来「筛选」的。如果什么都是 Error，运维一过滤 Error 就是一大片，真正出问题的看不出来。预警用 Warning、危险报警用 Error、正常流程用 Information，各司其职。" />
+    </ChildContent>
+</LessonPage>
+
+@code {
+    string levelKey = "Information";
+    int temperature = 78;
+    string fileTail = "（点“读取”）";
+
+    protected override void OnInitialized() => levelKey = LevelSwitch.MinimumLevel.ToString();
+
+    void ApplyLevel() => LevelSwitch.MinimumLevel = Enum.Parse<LogEventLevel>(levelKey);
+
+    void LogDebug() => Log.LogDebug("读到寄存器 {Address} 的值 {Value}", 0, 253);
+
+    void LogInfo() => Log.LogInformation("设备 {DeviceId} 连接成功，地址 {Host}:{Port}", 1, "127.0.0.1", 502);
+
+    void LogWarning() => Log.LogWarning("读取设备 {DeviceId} 超时，连续第 {Failures} 次", 1, 2);
+
+    void LogError()
+    {
+        try
+        {
+            throw new TimeoutException("数据库写入超过 3 秒没有响应");
+        }
+        catch (TimeoutException ex)
+        {
+            // 把异常对象交给日志（第一个参数）：文件里会带上完整的类型、消息和调用栈
+            Log.LogError(ex, "批量写入 {Count} 条采样失败", 120);
+        }
+    }
+
+    void LogConcat() => Log.LogInformation($"设备 1 温度 {temperature} ℃");
+
+    void LogStructured() => Log.LogInformation("设备 {DeviceId} 温度 {Temperature} ℃", 1, temperature);
+
+    async Task RefreshFile()
+    {
+        var lines = await LoggingSetup.ReadTodayTailAsync(10);
+        fileTail = lines.Length == 0 ? "（今天还没有日志写进文件）" : string.Join('\n', lines);
+    }
+
+    const string LevelCode = """
+        logger.LogDebug("读到寄存器 {Address} 的值 {Value}", 0, 253);
+        logger.LogInformation("设备 {DeviceId} 连接成功", 1);
+        logger.LogWarning("读取设备 {DeviceId} 超时，连续第 {Failures} 次", 1, 2);
+        logger.LogError(ex, "批量写入 {Count} 条采样失败", 120);   // 第一个参数放异常：带上调用栈
+        """;
+
+    string StructuredCode => $$"""
+        // 字符串拼接：属性丢了，只剩一段文字
+        logger.LogInformation($"设备 1 温度 {{temperature}} ℃");
+
+        // 结构化：{DeviceId}、{Temperature} 是独立的字段（注意模板里的花括号不是字符串插值）
+        logger.LogInformation("设备 {DeviceId} 温度 {Temperature} ℃", 1, {{temperature}});
+        """;
+
+    const string SetupCode = """
+        var logger = new LoggerConfiguration()
+            .MinimumLevel.ControlledBy(levelSwitch)             // 运行中可以改的最小级别
+            .WriteTo.File("logs/learnsite-.log",
+                rollingInterval: RollingInterval.Day,           // 每天一个文件
+                retainedFileCountLimit: 7)                      // 只留最近 7 天
+            .CreateLogger();
+
+        services.AddLogging(b => b.AddSerilog(logger));         // 业务代码仍然只依赖 ILogger<T>
+        """;
+}

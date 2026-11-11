@@ -58,6 +58,13 @@
 
 页面里显示的数字都是 C# 当场计算出来的，不是写死的动画。
 
+## 项目结构与测试
+
+- `02.LearnSite`：桌面应用（界面、数据库、采集管线）。
+- `02.LearnSite.Core`：不依赖界面和数据库的纯逻辑（Modbus 编解码、模拟设备、报警判断）。
+- `02.LearnSite.Tests`：xUnit 单元测试，只测 Core。运行：`dotnet test --project 02.LearnSite.Tests`。
+- 日志写在用户目录的 `.learnsite\logs`（按天滚动，保留 7 天）。
+
 ## 数据库课程（「数据库」与「综合实战」）
 
 这几课连的是 WSL 里 Docker 中的 PostgreSQL（EasyQuerySharp 项目自带的开发库），真实读写，不是模拟：

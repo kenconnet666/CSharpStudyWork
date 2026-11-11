@@ -1,0 +1,77 @@
+@*
+    把应用刚记的日志显示出来：时间、级别、内容，下面一行小字是结构化属性。日志一产生就刷新。
+*@
+@namespace LearnSite.Components.Visuals
+@using LearnSite.Logging
+@using Serilog.Events
+@implements IDisposable
+@inherits RuneComponent
+@inject MemoryLogSink Sink
+
+<Flex Direction="LayoutDirection.Column" Gap="SpaceScale.Xs">
+    <Flex Align="ItemAlign.Center" Justify="ContentJustify.Between" Gap="SpaceScale.Sm">
+        <IconLabel Icon="Lucide.ScrollText">@Title</IconLabel>
+        <Button Size="Size.Sm" Variant="ButtonVariant.Ghost" Tone="Tone.Neutral" Icon="Lucide.Eraser" @onclick="Sink.Clear">清空</Button>
+    </Flex>
+    @{
+        var entries = Sink.Recent(Count);
+    }
+    @if (entries.Count == 0)
+    {
+        <Paragraph Tone="TextTone.Muted">（还没有日志）</Paragraph>
+    }
+    @foreach (var entry in entries)
+    {
+        <Alert @key="@($"{entry.At.Ticks}{entry.Message}")" Tone="@ToneOf(entry.Level)" Icon="@IconOf(entry.Level)" Label="@entry.Level.ToString()">
+            <Flex Direction="LayoutDirection.Column" Gap="SpaceScale.Xs">
+                <span><Code>@entry.At.ToString("HH:mm:ss.fff")</Code> <strong>@Short(entry.Level)</strong> @entry.Message</span>
+                @if (ShowProperties && entry.Properties.Count > 0)
+                {
+                    <Small Tone="TextTone.Muted">属性：@string.Join("，", entry.Properties.Select(p => $"{p.Key} = {p.Value}"))</Small>
+                }
+            </Flex>
+        </Alert>
+    }
+</Flex>
+
+@code {
+    [Parameter] public string Title { get; set; } = "应用日志（刚刚记下的）";
+
+    /// <summary>最多显示最近几条。</summary>
+    [Parameter] public int Count { get; set; } = 8;
+
+    /// <summary>是否显示每条日志的结构化属性。</summary>
+    [Parameter] public bool ShowProperties { get; set; } = true;
+
+    protected override void OnInitialized() => Sink.Changed += OnChanged;
+
+    void OnChanged() => _ = InvokeAsync(StateHasChanged);
+
+    static string Short(LogEventLevel level) => level switch
+    {
+        LogEventLevel.Verbose => "VRB",
+        LogEventLevel.Debug => "DBG",
+        LogEventLevel.Information => "INF",
+        LogEventLevel.Warning => "WRN",
+        LogEventLevel.Error => "ERR",
+        _ => "FTL",
+    };
+
+    static Tone ToneOf(LogEventLevel level) => level switch
+    {
+        LogEventLevel.Warning => Tone.Warning,
+        LogEventLevel.Error or LogEventLevel.Fatal => Tone.Danger,
+        LogEventLevel.Information => Tone.Info,
+        _ => Tone.Neutral,
+    };
+
+    static IconData IconOf(LogEventLevel level) => level switch
+    {
+        LogEventLevel.Warning => Lucide.TriangleExclamationPoint,
+        LogEventLevel.Error or LogEventLevel.Fatal => Lucide.CircleX,
+        LogEventLevel.Information => Lucide.Info,
+        _ => Lucide.Bug,
+    };
+
+    public void Dispose() => Sink.Changed -= OnChanged;
+}

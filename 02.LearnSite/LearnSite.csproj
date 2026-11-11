@@ -36,6 +36,14 @@
         <PackageReference Include="RuneForBlazor.Desktop.Maui" Version="0.17.1" />
         <PackageReference Include="Npgsql" Version="10.0.3" />
         <PackageReference Include="EasyQuerySharp" Version="1.0.0" />
+        <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.14" />
+        <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.14" />
+        <PackageReference Include="Serilog.Extensions.Logging" Version="10.0.0" />
+        <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="../02.LearnSite.Core/LearnSite.Core.csproj" />
     </ItemGroup>
 
 

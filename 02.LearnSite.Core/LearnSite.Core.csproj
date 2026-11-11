@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <!--
+      学习站里"不依赖界面和数据库"的纯逻辑：Modbus 报文的编码解码、模拟设备、报警判断。
+      单独成一个类库，是为了能脱离桌面程序做单元测试（02.LearnSite.Tests）。
+    -->
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <RootNamespace>LearnSite</RootNamespace>
+    </PropertyGroup>
+
+</Project>

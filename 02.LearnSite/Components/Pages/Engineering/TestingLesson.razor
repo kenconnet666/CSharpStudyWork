@@ -1,0 +1,215 @@
+@page "/testing"
+@using System.Buffers.Binary
+@using LearnSite.Services
+@inherits RuneComponent
+
+@*
+    工程化 3：单元测试。真正的测试在 02.LearnSite.Tests（xUnit，23 个）；这一页用一个迷你的"测试运行器"，
+    对同一批用例跑"正确的实现"和"故意写坏的实现"，让你看到测试是怎么抓住 bug 的。
+*@
+
+<LessonPage Title="单元测试：让代码自己证明没改坏">
+    <Intro>
+        协议解析、校验计算、报警规则——这些代码<strong>改一点点就可能悄悄出错</strong>，而且错了往往要到现场、接上真设备才发现。
+        单元测试的思路是：<strong>把「期望的结果」写成代码</strong>，每次改完一键运行，几秒钟就知道有没有改坏。不用连设备、不用连数据库。
+    </Intro>
+    <ChildContent>
+        <ConceptGuide>
+            <Concept Term="单元测试" Analogy="出厂前的质检：每个零件按标准量一遍，合格才能装机。改了零件，再量一遍。" Compare="和 Java 的 JUnit 一样；C# 里最常用 xUnit（还有 NUnit、MSTest）。">
+                测<strong>一小段逻辑</strong>（一个函数、一个类）：给固定输入，断言输出等于期望值。不依赖网络、数据库、界面，所以又快又稳定，几百个测试几秒就跑完。
+            </Concept>
+            <Concept Term="Arrange – Act – Assert（准备、执行、断言）" Analogy="实验报告三步走：准备材料 → 做实验 → 对比结果。">
+                每个测试都是同样的三段：<strong>准备</strong>输入、<strong>调用</strong>被测代码、<strong>断言</strong>结果。一个测试只验证一件事，失败时一眼就知道是哪件事坏了；测试名用中文写清楚「在什么条件下，应该怎么样」。
+            </Concept>
+            <Concept Term="什么值得测" Analogy="重点检查容易出错、出错代价大的地方，不必给每个螺丝都单独做检测。">
+                值得测：<strong>协议编码解码</strong>（CRC、帧拆分、字节序）、<strong>业务规则</strong>（报警阈值、滞回）、<strong>边界情况</strong>（空数据、越界、超大值）。不值得测：纯粹的界面摆放、第三方库本身。
+            </Concept>
+            <Concept Term="可测试的代码" Analogy="能单独拿出来检测的零件，才能做质检；焊死在整机里的没法单独测。">
+                要让代码能测，就得把<strong>纯逻辑</strong>和「连设备、连数据库、画界面」<strong>分开</strong>。学习站里把 Modbus 编解码、模拟设备、报警判断放进了单独的 <Code>LearnSite.Core</Code> 类库，测试项目只引用它，不需要 MAUI 或数据库。这和上一课的依赖注入是配套的。
+            </Concept>
+        </ConceptGuide>
+
+        <Demo Title="演示：迷你测试运行器——选一个实现，跑同一批测试">
+            <Stage>
+                <Paragraph Tone="TextTone.Muted">选一个被测的实现（有的是「不小心写坏」的版本），然后运行全部测试：</Paragraph>
+                <ToggleGroup @bind-Value="implKey" @bind-Value:after="ClearResults" Required="true" aria-label="被测的实现">
+                    @foreach (var impl in Impls)
+                    {
+                        <ToggleItem Value="@impl.Key">@impl.Label</ToggleItem>
+                    }
+                </ToggleGroup>
+                <Flex Gap="SpaceScale.Sm" Wrap="true">
+                    <Button Icon="Lucide.Play" @onclick="RunAll">运行全部测试</Button>
+                </Flex>
+                <Alert Tone="@Tone.Info" Icon="Lucide.Bug" Label="被测实现">@((MarkupString)Current.Note)</Alert>
+                <CodeBlock @key="implKey" Code="@Current.Code" Lang="csharp" Copyable="false" />
+            </Stage>
+            <Side>
+                @if (results.Count > 0)
+                {
+                    <Grid MinItemWidth="CssLength.Rem(10)" Gap="SpaceScale.Sm">
+                        <Slot Name="通过" Data="@results.Count(r => r.Passed).ToString()" Changed="true" />
+                        <Slot Name="失败" Data="@results.Count(r => !r.Passed).ToString()" Changed="@results.Any(r => !r.Passed)" />
+                    </Grid>
+                    <Table Density="TableDensity.Compact" Striped="true" aria-label="测试结果">
+                        <TableHead>
+                            <TableRow>
+                                <TableHeaderCell>测试</TableHeaderCell>
+                                <TableHeaderCell>结果</TableHeaderCell>
+                                <TableHeaderCell>期望 / 实际</TableHeaderCell>
+                            </TableRow>
+                        </TableHead>
+                        <TableBody>
+                            @foreach (var r in results)
+                            {
+                                <TableRow @key="r.Name">
+                                    <TableCell>@r.Name</TableCell>
+                                    <TableCell NoWrap="true">@(r.Passed ? "通过" : "失败")</TableCell>
+                                    <TableCell>@(r.Passed ? "" : $"期望 {r.Expected}，实际 {r.Actual}")</TableCell>
+                                </TableRow>
+                            }
+                        </TableBody>
+                    </Table>
+                }
+                else
+                {
+                    <Paragraph Tone="TextTone.Muted">（点“运行全部测试”）</Paragraph>
+                }
+                <Narration @key="@($"{implKey}{results.Count}{results.Count(r => !r.Passed)}")" Mood="@(results.Any(r => !r.Passed) ? "🚨" : "✅")">
+                    @if (results.Count == 0)
+                    {
+                        <text>先在正确的实现上运行：全部通过。再换成带 bug 的版本运行，看测试是怎么<strong>精确指出哪里坏了</strong>的。</text>
+                    }
+                    else if (results.Any(r => !r.Passed))
+                    {
+                        <text>有测试失败了。注意失败的<strong>正好是和这个 bug 相关的那几个</strong>，并且告诉了你期望值和实际值——不用连设备、不用调试，读一遍失败信息就知道问题在哪。这就是测试的价值：<strong>在你把坏代码带到现场之前抓住它</strong>。</text>
+                    }
+                    else
+                    {
+                        <text>全部通过。每次改动协议或报警规则之后都跑一遍，只要还是全绿，就说明原来的行为没被改坏。</text>
+                    }
+                </Narration>
+            </Side>
+        </Demo>
+
+        <Demo Title="真正的测试在哪里、怎么跑">
+            <Stage>
+                <CodeBlock Code="@RealTestCode" Lang="csharp" Copyable="false" />
+            </Stage>
+            <Side>
+                <Narration Mood="🧰">
+                    上面这个测试在 <Code>02.LearnSite.Tests/ModbusCodecTests.cs</Code>。项目里一共 23 个测试，覆盖 CRC、报文编码、模拟设备的应答和异常、报警的滞回。
+                    在 Rider 里：打开测试文件，点测试方法旁边的绿色三角运行；或在终端：
+                </Narration>
+                <CodeBlock Code="dotnet test --project 02.LearnSite.Tests" Lang="bash" Copyable="true" />
+                <Quiz Question="修改了 CRC 算法后，怎么确认没有把协议改坏？" Options="@(new[] { "接上真实设备试一试", "运行单元测试：已知报文的 CRC 期望值不变就说明没改坏", "只看代码有没有编译错误" })" Answer="1"
+                      Explain="编译通过只说明语法没错，不说明结果对。已知报文 → 已知 CRC 的测试，几毫秒就能验证；接真设备既慢，又不一定恰好覆盖到出错的情况。" />
+            </Side>
+        </Demo>
+
+        <Prose Measure="false">
+            <H2>写上位机项目时的建议</H2>
+            <ul>
+                <li><strong>协议层先写测试</strong>：先用资料里的标准报文（比如 <Code>01 03 00 00 00 03 05 CB</Code>）当测试用例，再写实现，对了再接设备。</li>
+                <li><strong>发现现场 bug 后，先写一个能复现它的测试</strong>，再修，修好测试变绿——这个 bug 以后就不会再回来了。</li>
+                <li><strong>假设备（<Code>FakeReader</Code>）</strong>：测试报警逻辑时，注入一个固定返回 90 ℃ 的假设备，不需要真的把温度烧到 90。</li>
+                <li>测试要<strong>快、稳、互相独立</strong>：不依赖执行顺序，不依赖外部环境（网络、时间、文件）。</li>
+            </ul>
+        </Prose>
+    </ChildContent>
+</LessonPage>
+
+@code {
+    sealed record Impl(
+        string Key,
+        string Label,
+        string Note,
+        string Code,
+        Func<byte[], ushort> Crc,
+        Func<byte[]> BuildRequest,
+        Func<double, AlarmLevel, AlarmLevel> Alarm);
+
+    sealed record TestResult(string Name, bool Passed, string Expected, string Actual);
+
+    static ushort CrcWithInit(ReadOnlySpan<byte> data, ushort init)
+    {
+        var crc = init;
+        foreach (var b in data)
+        {
+            crc ^= b;
+            for (var i = 0; i < 8; i++) crc = (crc & 1) != 0 ? (ushort)((crc >> 1) ^ 0xA001) : (ushort)(crc >> 1);
+        }
+        return crc;
+    }
+
+    static byte[] BuildRequestBigEndianCrc()
+    {
+        var frame = ModbusCodec.BuildRtuRequest(1, 3, 0, 3);
+        BinaryPrimitives.WriteUInt16BigEndian(frame.AsSpan(6), ModbusCodec.Crc16(frame.AsSpan(0, 6)));   // 写反了：应该低字节在前
+        return frame;
+    }
+
+    static AlarmLevel AlarmWithoutHysteresis(double temperature, AlarmLevel current) =>
+        temperature >= 85 ? AlarmLevel.Danger : temperature >= 70 ? AlarmLevel.Warning : AlarmLevel.None;
+
+    static readonly Impl[] Impls =
+    [
+        new("ok", "正确的实现", "当前被测的是 <code>LearnSite.Core</code> 里真正的代码。",
+            "ushort Crc16(ReadOnlySpan<byte> data)\n{\n    ushort crc = 0xFFFF;                       // 初值 0xFFFF\n    ...\n}\n\nBinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(6), crc);   // CRC 低字节在前\n\n// 报警：已在报警时，降到「预警线 - 2 度」以下才恢复",
+            data => ModbusCodec.Crc16(data), () => ModbusCodec.BuildRtuRequest(1, 3, 0, 3), (t, current) => new AlarmEvaluator(70, 85, 2).Evaluate(t, current)),
+        new("init0", "bug：CRC 初值写成 0", "有人把 CRC 的<strong>初值</strong>从 0xFFFF 手滑改成了 0。编译完全没问题，但算出的所有校验值都不对。",
+            "ushort Crc16(ReadOnlySpan<byte> data)\n{\n    ushort crc = 0x0000;                       // 手滑：本该是 0xFFFF\n    ...\n}",
+            data => CrcWithInit(data, 0x0000), () => ModbusCodec.BuildRtuRequest(1, 3, 0, 3), (t, current) => new AlarmEvaluator(70, 85, 2).Evaluate(t, current)),
+        new("endian", "bug：CRC 高低字节写反", "CRC 的计算本身是对的，但拼进报文时<strong>写成了高字节在前</strong>（Modbus RTU 要求低字节在前）。设备会认为每一帧都校验失败而不回应。",
+            "BinaryPrimitives.WriteUInt16BigEndian(frame.AsSpan(6), crc);   // 写反了：RTU 的 CRC 要低字节在前",
+            data => ModbusCodec.Crc16(data), BuildRequestBigEndianCrc, (t, current) => new AlarmEvaluator(70, 85, 2).Evaluate(t, current)),
+        new("nohys", "bug：报警忘了滞回", "报警判断被「简化」成只看阈值，<strong>去掉了滞回</strong>。温度在 70 度上下抖动时，报警会反复产生、恢复。",
+            "AlarmLevel Evaluate(double t, AlarmLevel current) =>\n    t >= 85 ? AlarmLevel.Danger\n    : t >= 70 ? AlarmLevel.Warning\n    : AlarmLevel.None;                 // 少了「还没降到恢复线就维持」这一条",
+            data => ModbusCodec.Crc16(data), () => ModbusCodec.BuildRtuRequest(1, 3, 0, 3), AlarmWithoutHysteresis),
+    ];
+
+    /// <summary>每个测试：名字 + 对被测实现运行，返回（期望，实际）的文字。</summary>
+    static readonly (string Name, Func<Impl, (string Expected, string Actual)> Run)[] Cases =
+    [
+        ("Crc16：已知报文得到标准校验值", impl => ("0xCB05", $"0x{impl.Crc([0x01, 0x03, 0x00, 0x00, 0x00, 0x03]):X4}")),
+        ("Crc16：空数据是初值 0xFFFF", impl => ("0xFFFF", $"0x{impl.Crc([]):X4}")),
+        ("BuildRtuRequest：末尾是低字节在前的 CRC", impl => ("01 03 00 00 00 03 05 CB", ByteText.Hex(impl.BuildRequest()))),
+        ("报警：60 度没有报警", impl => ("无", Describe(impl.Alarm(60, AlarmLevel.None)))),
+        ("报警：70 度刚好预警", impl => ("预警", Describe(impl.Alarm(70, AlarmLevel.None)))),
+        ("报警：85 度危险", impl => ("危险", Describe(impl.Alarm(85, AlarmLevel.None)))),
+        ("报警：预警中 69 度，没降到恢复线，维持预警", impl => ("预警", Describe(impl.Alarm(69, AlarmLevel.Warning)))),
+        ("报警：预警中 67.9 度，降到恢复线以下，恢复", impl => ("无", Describe(impl.Alarm(67.9, AlarmLevel.Warning)))),
+        ("报警：没有报警时 69 度，不会产生报警", impl => ("无", Describe(impl.Alarm(69, AlarmLevel.None)))),
+    ];
+
+    static string Describe(AlarmLevel level) => level switch { AlarmLevel.Danger => "危险", AlarmLevel.Warning => "预警", _ => "无" };
+
+    string implKey = "ok";
+    List<TestResult> results = [];
+
+    Impl Current => Impls.First(i => i.Key == implKey);
+
+    void ClearResults() => results = [];
+
+    void RunAll() =>
+        results = [.. Cases.Select(c =>
+        {
+            var (expected, actual) = c.Run(Current);
+            return new TestResult(c.Name, expected == actual, expected, actual);
+        })];
+
+    const string RealTestCode = """
+        public class ModbusCodecTests
+        {
+            [Fact]
+            public void Crc16_已知报文得到标准校验值()
+            {
+                // 准备（Arrange）：资料里的标准报文
+                byte[] frame = [0x01, 0x03, 0x00, 0x00, 0x00, 0x03];
+
+                // 执行 + 断言（Act + Assert）：算出来必须等于标准值
+                Assert.Equal(0xCB05, ModbusCodec.Crc16(frame));
+            }
+        }
+        """;
+}
