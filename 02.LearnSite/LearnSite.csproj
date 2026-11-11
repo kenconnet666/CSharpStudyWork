@@ -35,11 +35,8 @@
         <PackageReference Include="RuneForBlazor.Charts" Version="0.17.1" />
         <PackageReference Include="RuneForBlazor.Desktop.Maui" Version="0.17.1" />
         <PackageReference Include="Npgsql" Version="10.0.3" />
+        <PackageReference Include="EasyQuerySharp" Version="1.0.0" />
     </ItemGroup>
 
-    <ItemGroup>
-        <!-- 先用本地源码引用 EasyQuerySharp（学习中发现缺漏可以当场改）；验证无误后改回 nuget.org 的正式版本 -->
-        <ProjectReference Include="..\..\EasyQuerySharp\src\EasyQuerySharp\EasyQuerySharp.csproj" />
-    </ItemGroup>
 
 </Project>
