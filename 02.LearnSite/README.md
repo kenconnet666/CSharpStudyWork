@@ -69,7 +69,7 @@
    `Host=127.0.0.1;Port=45432;Username=learnsite;Password=你的密码;Database=learnsite`
 
 表和示例设备在第一次进入这些页面时自动创建（EasyQuerySharp 的 CodeFirst）。库没启动时页面会显示原因和启动命令。
-EasyQuerySharp 目前是**本地项目引用**（`..\..\EasyQuerySharp`），验证完后改回 nuget.org 的正式版本。
+EasyQuerySharp 用 nuget.org 的正式版本（1.0.0）。
 
 ## 关于组件库
 
