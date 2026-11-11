@@ -19,6 +19,7 @@ public static class MauiProgram
         builder.Services.AddBlazorWebViewDeveloperTools();
 #endif
         builder.Services.AddRuneUI(o => o.ThemeChoices = ThemeChoices.Builtin);
+        builder.Services.AddSingleton<Data.LearnDb>();
         return builder.Build();
     }
 }

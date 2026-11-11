@@ -1,0 +1,43 @@
+@*
+    把 EasyQuerySharp 刚执行过的 SQL 展示出来：SQL 文本、参数、耗时、行数。查询、写入一执行就刷新。
+*@
+@namespace LearnSite.Components.Visuals
+@using LearnSite.Data
+@implements IDisposable
+@inherits RuneComponent
+@inject LearnDb Db
+
+<Flex Direction="LayoutDirection.Column" Gap="SpaceScale.Sm">
+    <Flex Align="ItemAlign.Center" Justify="ContentJustify.Between" Gap="SpaceScale.Sm">
+        <IconLabel Icon="Lucide.Terminal">@Title</IconLabel>
+        <Button Size="Size.Sm" Variant="ButtonVariant.Ghost" Tone="Tone.Neutral" Icon="Lucide.Eraser" @onclick="Db.Log.Clear">清空</Button>
+    </Flex>
+    @{
+        var entries = Db.Log.Recent(Count);
+    }
+    @if (entries.Count == 0)
+    {
+        <Paragraph Tone="TextTone.Muted">（还没有 SQL 被执行）</Paragraph>
+    }
+    @foreach (var entry in entries)
+    {
+        <CodeBlock @key="@($"{entry.At.Ticks}{entry.Text}")" Lang="sql" Copyable="false" Code="@Describe(entry)" />
+    }
+</Flex>
+
+@code {
+    /// <summary>标题。</summary>
+    [Parameter] public string Title { get; set; } = "生成并执行的 SQL";
+
+    /// <summary>最多显示最近几条。</summary>
+    [Parameter] public int Count { get; set; } = 3;
+
+    protected override void OnInitialized() => Db.Log.Changed += OnChanged;
+
+    void OnChanged() => _ = InvokeAsync(StateHasChanged);
+
+    static string Describe(SqlEntry e) =>
+        $"{e.Text}\n-- 参数：[{e.Parameters}]\n-- 耗时 {e.Milliseconds:F1} 毫秒" + (e.Rows is { } rows ? $"，{rows} 行" : "") + (e.Error is null ? "" : $"\n-- 出错：{e.Error}");
+
+    public void Dispose() => Db.Log.Changed -= OnChanged;
+}

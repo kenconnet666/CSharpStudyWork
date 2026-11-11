@@ -11,6 +11,9 @@ public sealed class ModbusLoopback : LoopbackServer
 {
     ushort transactionId;
 
+    /// <summary>为 true 时从站收到请求也不回应——模拟网线被拔、设备死机，主站会真的等到超时。</summary>
+    public bool Silent { get; set; }
+
     public ModbusDevice Device { get; } = new();
 
     public ushort NextTransactionId() => ++transactionId;
@@ -18,16 +21,16 @@ public sealed class ModbusLoopback : LoopbackServer
     protected override async Task ServeAsync(NetworkStream stream, CancellationToken token)
     {
         while (await ReadFrameAsync(stream, token) is { } request)
-            await stream.WriteAsync(Device.Handle(request), token);
+            if (!Silent) await stream.WriteAsync(Device.Handle(request), token);
     }
 
-    /// <summary>发出一帧请求并等待应答（超时 2 秒）。</summary>
-    public async Task<byte[]> RequestAsync(byte[] request)
+    /// <summary>发出一帧请求并等待应答；超过 <paramref name="timeout"/>（默认 2 秒）没有应答抛 <see cref="OperationCanceledException"/>。</summary>
+    public async Task<byte[]> RequestAsync(byte[] request, TimeSpan? timeout = null)
     {
         var stream = ClientStream;
         await stream.WriteAsync(request);
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-        return await ReadFrameAsync(stream, timeout.Token) ?? throw new IOException("对方关闭了连接");
+        using var cts = new CancellationTokenSource(timeout ?? TimeSpan.FromSeconds(2));
+        return await ReadFrameAsync(stream, cts.Token) ?? throw new IOException("对方关闭了连接");
     }
 
     /// <summary>读一整帧：先 7 字节头，再按头里的长度字段读剩余字节。对方关闭连接返回 null。</summary>

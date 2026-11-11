@@ -1,0 +1,266 @@
+@page "/scada"
+@using LearnSite.Data
+@using LearnSite.Services
+@implements IAsyncDisposable
+@inherits RuneComponent
+@inject LearnDb Db
+
+@*
+    综合实战：迷你上位机。把前面学的全部串起来——
+      Modbus TCP 轮询（真实 TCP）→ 超时 / 断线重连 → Channel 队列 → 批量写入 PostgreSQL（EasyQuerySharp）
+      → 温度报警（产生 / 恢复都入库）→ 报警列表（导航属性查询）→ 历史统计（手写 SQL 按分钟汇总）。
+*@
+
+<LessonPage Title="综合实战：迷你上位机">
+    <Intro>
+        这一页是一个<strong>真的能跑</strong>的小上位机：本机有一台模拟的 Modbus TCP 设备，温度和压力在不停地变；上位机每 0.5 秒轮询它，
+        数据经队列批量写进 PostgreSQL，温度超限就产生报警并入库，下面还能查历史。前面每一课学的东西，都在这里出现。
+    </Intro>
+    <ChildContent>
+        <DbGate>
+            @* ---------- 控制台 ---------- *@
+            <Demo Title="控制台：开始采集，然后试着「加热」、「拔网线」">
+                <Stage>
+                    <Flex Gap="SpaceScale.Sm" Wrap="true">
+                        <Button Icon="@(collector.Running ? Lucide.Square : Lucide.Play)" @onclick="Toggle">@(collector.Running ? "停止采集" : "开始采集")</Button>
+                        <Button Variant="ButtonVariant.Soft" Tone="@(plant.DeviceSilent ? Tone.Success : Tone.Danger)" Icon="@(plant.DeviceSilent ? Lucide.Plug : Lucide.Unplug)" @onclick="ToggleSilent">@(plant.DeviceSilent ? "插回网线" : "拔掉网线")</Button>
+                        <Button Variant="ButtonVariant.Ghost" Tone="Tone.Neutral" Icon="Lucide.Eraser" @onclick="Clear">清空历史数据</Button>
+                    </Flex>
+                    <Field Label="@($"设备的目标温度 {target} ℃（温度会慢慢靠过去）")"><Slider TValue="int" @bind-Value="target" @bind-Value:after="ApplySettings" Min="30" Max="110" /></Field>
+                    <Grid MinItemWidth="CssLength.Rem(14)" Gap="SpaceScale.Md">
+                        <Field Label="@($"预警线 {warnAt} ℃")"><Slider TValue="int" @bind-Value="warnAt" @bind-Value:after="ApplySettings" Min="50" Max="100" /></Field>
+                        <Field Label="@($"危险线 {dangerAt} ℃")"><Slider TValue="int" @bind-Value="dangerAt" @bind-Value:after="ApplySettings" Min="60" Max="110" /></Field>
+                    </Grid>
+                    <Narration Mood="🎯">
+                        试这个顺序：<strong>开始采集</strong> → 把<strong>目标温度拉到 100</strong>（几秒后先出预警、再出危险报警）→ 拉回 50（温度回落到预警线 2 度以下才恢复，避免在阈值附近反复报警）→ <strong>拔掉网线</strong>（重连状态出现，网线插回后自动恢复）。
+                    </Narration>
+                </Stage>
+                <Side>
+                    <Alert Tone="@AlarmTone" Icon="@AlarmIcon" Label="设备状态">
+                        <Flex Direction="LayoutDirection.Column" Gap="SpaceScale.Xs">
+                            <strong>@AlarmText</strong>
+                            <span>通信：@collector.State @(collector.Failures > 0 ? $"（连续失败 {collector.Failures} 次）" : "")</span>
+                        </Flex>
+                    </Alert>
+                    <Grid MinItemWidth="CssLength.Rem(10)" Gap="SpaceScale.Sm">
+                        <Slot Name="温度" Data="@(collector.Temperature is { } t ? $"{t:F1} ℃" : "—")" Changed="@(collector.AlarmLevel != "none")" />
+                        <Slot Name="压力" Data="@(collector.Pressure is { } p ? $"{p:F0} kPa" : "—")" />
+                        <Slot Name="已轮询" Data="@collector.Polled.ToString()" />
+                        <Slot Name="入库 / 队列" Data="@($"{collector.Written} / {collector.Queued}")" />
+                    </Grid>
+                </Side>
+            </Demo>
+
+            @* ---------- 实时趋势 + 报警 ---------- *@
+            <Demo Title="实时趋势与报警记录">
+                <Stage>
+                    <IconLabel Icon="Lucide.ChartLine">最近 60 次轮询（约 30 秒）</IconLabel>
+                    <LineChart Items="trend" Category="p => p.Index" Series="trendSeries" Height="240" aria-label="温度与压力趋势" />
+                </Stage>
+                <Side>
+                    <IconLabel Icon="Lucide.Siren">最近的报警（来自数据库）</IconLabel>
+                    @if (alarms.Count == 0)
+                    {
+                        <Paragraph Tone="TextTone.Muted">还没有报警。把目标温度拉到预警线以上试试。</Paragraph>
+                    }
+                    else
+                    {
+                        <Table Density="TableDensity.Compact" Striped="true" aria-label="报警记录">
+                            <TableHead>
+                                <TableRow>
+                                    <TableHeaderCell>级别</TableHeaderCell>
+                                    <TableHeaderCell>内容</TableHeaderCell>
+                                    <TableHeaderCell>产生</TableHeaderCell>
+                                    <TableHeaderCell>恢复</TableHeaderCell>
+                                </TableRow>
+                            </TableHead>
+                            <TableBody>
+                                @foreach (var a in alarms)
+                                {
+                                    <TableRow @key="a.Id">
+                                        <TableCell NoWrap="true">@(a.Level == "danger" ? "危险" : "预警")</TableCell>
+                                        <TableCell>@a.Message</TableCell>
+                                        <TableCell NoWrap="true">@a.RaisedAt.ToString("HH:mm:ss")</TableCell>
+                                        <TableCell NoWrap="true">@(a.ClearedAt?.ToString("HH:mm:ss") ?? "报警中")</TableCell>
+                                    </TableRow>
+                                }
+                            </TableBody>
+                        </Table>
+                    }
+                </Side>
+            </Demo>
+
+            @* ---------- 历史 ---------- *@
+            <Demo Title="历史统计：数据库按分钟汇总">
+                <Stage>
+                    <Paragraph Tone="TextTone.Muted">时间范围</Paragraph>
+                    <ToggleGroup @bind-Value="rangeKey" @bind-Value:after="RefreshHistory" Required="true" aria-label="时间范围">
+                        <ToggleItem Value="5">最近 5 分钟</ToggleItem>
+                        <ToggleItem Value="15">最近 15 分钟</ToggleItem>
+                        <ToggleItem Value="60">最近 1 小时</ToggleItem>
+                    </ToggleGroup>
+                    <CodeBlock Code="@HistorySql" Lang="sql" Copyable="false" />
+                </Stage>
+                <Side>
+                    <ResultTable Result="history" />
+                </Side>
+            </Demo>
+
+            <Demo Title="这页用到的东西，分别来自哪一课">
+                <Stage>
+                    <Prose Measure="false">
+                        <table>
+                            <thead><tr><th>这页里的功能</th><th>用到的知识</th><th>对应的课</th></tr></thead>
+                            <tbody>
+                                <tr><td>读设备温度、压力</td><td>Modbus TCP 请求 / 应答、字节序、寄存器</td><td><a href="modbustcp">Modbus TCP</a></td></tr>
+                                <tr><td>读不到时重试、重连</td><td>超时、连续失败计数、退避</td><td><a href="polling">轮询与断线重连</a></td></tr>
+                                <tr><td>收一整帧</td><td>TCP 是字节流，先读头再按长度读完</td><td><a href="tcp">Socket / TCP</a></td></tr>
+                                <tr><td>读与写分开</td><td>Channel 队列、async / await、后台任务</td><td><a href="collect">采集落库</a></td></tr>
+                                <tr><td>批量写入、报警入库</td><td>Insert().Batch()、Update、FillGeneratedKeys</td><td><a href="writes">写入与事务</a></td></tr>
+                                <tr><td>报警列表</td><td>导航属性查询、投影</td><td><a href="query">EasyQuerySharp 查询</a></td></tr>
+                                <tr><td>历史统计</td><td>手写 SQL：GROUP BY、聚合、参数化</td><td><a href="sql">表与 SQL</a></td></tr>
+                                <tr><td>报警滞回、状态变化</td><td>模式匹配 / switch 表达式的思路</td><td><a href="patterns">模式匹配</a></td></tr>
+                            </tbody>
+                        </table>
+                    </Prose>
+                </Stage>
+                <Side>
+                    <SqlLogView Count="3" Title="刚才发给数据库的 SQL" />
+                </Side>
+            </Demo>
+        </DbGate>
+    </ChildContent>
+</LessonPage>
+
+@code {
+    sealed record TrendPoint(int Index, decimal Temperature, decimal Pressure);
+
+    sealed record AlarmRow(long Id, string Level, string Message, DateTime RaisedAt, DateTime? ClearedAt);
+
+    static readonly ChartSeries<TrendPoint>[] trendSeries =
+    [
+        new("temperature", "温度 ℃", p => p.Temperature),
+        new("pressure", "压力 kPa", p => p.Pressure),
+    ];
+
+    SimulatedPlant plant = default!;
+    DeviceCollector collector = default!;
+    CancellationTokenSource? refreshCts;
+
+    int target = 55;
+    int warnAt = 70;
+    int dangerAt = 85;
+    string rangeKey = "15";
+
+    IReadOnlyList<TrendPoint> trend = [];
+    IReadOnlyList<AlarmRow> alarms = [];
+    QueryResult? history;
+
+    protected override void OnInitialized()
+    {
+        plant = new SimulatedPlant(Db);
+        collector = plant.Collector;
+        collector.Changed += OnCollectorChanged;
+        ApplySettings();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || !await Db.EnsureReadyAsync()) return;
+        refreshCts = new CancellationTokenSource();
+        _ = RefreshLoop(refreshCts.Token);
+    }
+
+    void OnCollectorChanged() => _ = InvokeAsync(() =>
+    {
+        var (temperatures, pressures) = collector.Trend();
+        trend = [.. temperatures.Select((t, i) => new TrendPoint(i + 1, (decimal)t, (decimal)pressures[i]))];
+        StateHasChanged();
+    });
+
+    /// <summary>每 2 秒从数据库刷新一次报警列表和历史统计。界面上的数据都是"从库里查出来"的，不是内存里的。</summary>
+    async Task RefreshLoop(CancellationToken token)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(2));
+        try
+        {
+            do
+            {
+                await RefreshAlarms();
+                await RefreshHistory();
+                StateHasChanged();
+            }
+            while (await timer.WaitForNextTickAsync(token));
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    async Task RefreshAlarms() =>
+        alarms = (await Db.Db.Query<Alarm>()
+            .OrderByDescending(a => a.RaisedAt)
+            .ToPageAsync(1, 8, a => new AlarmRow(a.Id, a.Level, a.Message, a.RaisedAt, a.ClearedAt))).Rows;
+
+    async Task RefreshHistory() =>
+        history = await Db.QueryReadOnlyAsync(
+            """
+            SELECT date_trunc('minute', at) AS minute,
+                   ROUND(AVG(value)::numeric, 1) AS avg_temp,
+                   MIN(value) AS min_temp, MAX(value) AS max_temp, COUNT(*) AS n
+            FROM t_reading
+            WHERE device_id = 1 AND tag = 'temperature'
+              AND at > now()::timestamp - make_interval(mins => @mins)
+            GROUP BY 1 ORDER BY 1 DESC LIMIT 10
+            """,
+            new Dictionary<string, object?> { ["mins"] = int.Parse(rangeKey) });
+
+    string HistorySql => $"""
+        SELECT date_trunc('minute', at) AS minute,       -- 按分钟分组
+               ROUND(AVG(value)::numeric, 1) AS avg_temp,
+               MIN(value) AS min_temp, MAX(value) AS max_temp, COUNT(*) AS n
+        FROM t_reading
+        WHERE device_id = 1 AND tag = 'temperature'
+          AND at > now()::timestamp - make_interval(mins => {rangeKey})
+        GROUP BY 1 ORDER BY 1 DESC LIMIT 10
+        """;
+
+    void ApplySettings()
+    {
+        plant.Simulator.Target = target;
+        collector.WarnAt = warnAt;
+        collector.DangerAt = Math.Max(dangerAt, warnAt + 1);
+    }
+
+    async Task Toggle()
+    {
+        if (collector.Running) await collector.StopAsync();
+        else collector.Start();
+    }
+
+    void ToggleSilent() => plant.DeviceSilent = !plant.DeviceSilent;
+
+    async Task Clear()
+    {
+        await Db.ResetDataAsync();
+        await RefreshAlarms();
+        await RefreshHistory();
+    }
+
+    Tone AlarmTone => collector.AlarmLevel switch { "danger" => Tone.Danger, "warning" => Tone.Warning, _ => Tone.Success };
+
+    IconData AlarmIcon => collector.AlarmLevel switch { "danger" => Lucide.Siren, "warning" => Lucide.TriangleExclamationPoint, _ => Lucide.CircleCheck };
+
+    string AlarmText => (collector.AlarmLevel, collector.Temperature) switch
+    {
+        ("danger", { } t) => $"危险报警：温度 {t:F1} ℃，超过危险线 {collector.DangerAt:F0} ℃",
+        ("warning", { } t) => $"预警：温度 {t:F1} ℃，超过预警线 {collector.WarnAt:F0} ℃",
+        (_, { } t) => $"运行正常：温度 {t:F1} ℃",
+        _ => "还没有数据：点“开始采集”",
+    };
+
+    public async ValueTask DisposeAsync()
+    {
+        refreshCts?.Cancel();
+        collector.Changed -= OnCollectorChanged;
+        await plant.DisposeAsync();
+    }
+}

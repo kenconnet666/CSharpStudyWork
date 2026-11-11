@@ -1,0 +1,257 @@
+@page "/query"
+@using LearnSite.Data
+@using EasyQuerySharp
+@inherits RuneComponent
+@inject LearnDb Db
+
+@*
+    数据 2：用 EasyQuerySharp 查询。C# 的 Lambda 表达式 → 自动生成 SQL；表之间的关系写成"导航属性"，自动变成 JOIN / 子查询。
+    演示 1：按条件拼查询并分页；演示 2：导航属性怎么变成 JOIN、EXISTS、子查询。
+*@
+
+<LessonPage Title="EasyQuerySharp：用 C# 写查询，自动生成 SQL">
+    <Intro>
+        上一课手写 SQL，字符串里写错一个字母要运行时才知道，改表结构也没人提醒。<strong>EasyQuerySharp</strong> 让你用 C# 的 Lambda 表达式写查询：
+        有智能提示、写错编译就报错，并且<strong>自动生成 SQL</strong>。下面每次操作，右边都会显示它真正发给数据库的 SQL。
+    </Intro>
+    <ChildContent>
+        <ConceptGuide>
+            <Concept Term="实体类 = 一张表" Analogy="实体类是表的「模具」：类名对应表名，属性对应列，一个对象就是一行。" Compare="和 Java 的 JPA / MyBatis-Plus 的实体类相似，区别是这里查询写成 Lambda 表达式，不用写 XML 或字符串。">
+                我们的 <Code>Reading</Code> 类对应 <Code>t_reading</Code> 表。类上的 <Code>[Table]</Code>、<Code>[TableIndex]</Code> 特性决定表名和索引，程序第一次运行时由 <Code>CodeFirst</Code> 自动建表。
+            </Concept>
+            <Concept Term="表达式树：Lambda 变成 SQL" Analogy="你写的 Lambda 不是被「执行」，而是被「读懂」：库把 <code>r =&gt; r.Value &gt;= 60</code> 拆成「值大于等于 60」，再翻译成 SQL 的 WHERE。">
+                所以 Lambda 里只能写它能翻译的东西（比较、逻辑、导航、聚合）。写了翻译不了的，编译期的分析器就会提醒你。
+            </Concept>
+            <Concept Term="链式查询与终结方法" Analogy="像点菜单：Where、OrderBy 只是往菜单上添菜，直到 ToListAsync 才真正下单。">
+                <Code>db.Query&lt;T&gt;()</Code> 开始，<Code>Where</Code>、<Code>OrderBy</Code>、<Code>Select</Code> 每次返回新的查询对象（不可变），遇到 <Code>ToListAsync</Code> / <Code>ToPageAsync</Code> 才执行。条件是否生效可以用 <Code>WhereIf(条件, ...)</Code> 控制，不用手写一堆 if。
+            </Concept>
+            <Concept Term="导航属性" Analogy="设备对象身上挂着「它的所有采样值」这个抽屉：想查「有过超温记录的设备」，直接问抽屉里有没有，不用自己写 JOIN。">
+                在实体上用 <Code>[Navigate]</Code> 声明两张表的关系后，Lambda 里直接写 <Code>r.Device!.Location</Code>（多对一，生成 LEFT JOIN）或 <Code>d.Readings!.Any(...)</Code>（一对多，生成 EXISTS 子查询）。
+            </Concept>
+        </ConceptGuide>
+
+        <DbGate>
+            <Demo Title="演示 1：拼条件 + 分页——每改一个条件，查询重新生成并执行">
+                <Stage>
+                    <Paragraph Tone="TextTone.Muted">没有数据先点这个：</Paragraph>
+                    <Flex Gap="SpaceScale.Sm" Wrap="true">
+                        <Button Variant="ButtonVariant.Soft" Tone="Tone.Neutral" Icon="Lucide.Sprout" @onclick="SeedAsync">生成示例数据</Button>
+                    </Flex>
+                    <Paragraph Tone="TextTone.Muted">设备</Paragraph>
+                    <ToggleGroup @bind-Value="deviceKey" @bind-Value:after="ReloadFromFirstPage" Required="true" aria-label="设备">
+                        <ToggleItem Value="0">全部</ToggleItem>
+                        <ToggleItem Value="1">1 号反应釜</ToggleItem>
+                        <ToggleItem Value="2">2 号反应釜</ToggleItem>
+                        <ToggleItem Value="3">冷却水泵</ToggleItem>
+                    </ToggleGroup>
+                    <Paragraph Tone="TextTone.Muted">量</Paragraph>
+                    <ToggleGroup @bind-Value="tag" @bind-Value:after="ReloadFromFirstPage" Required="true" aria-label="量">
+                        <ToggleItem Value="temperature">温度</ToggleItem>
+                        <ToggleItem Value="pressure">压力</ToggleItem>
+                    </ToggleGroup>
+                    <Field Label="@($"读数不小于 {minValue}（0 表示不限制）")">
+                        <Slider TValue="int" @bind-Value="minValue" @bind-Value:after="ReloadFromFirstPage" Min="0" Max="110" />
+                    </Field>
+                    <Paragraph Tone="TextTone.Muted">排序</Paragraph>
+                    <ToggleGroup @bind-Value="order" @bind-Value:after="ReloadFromFirstPage" Required="true" aria-label="排序">
+                        <ToggleItem Value="time">时间倒序</ToggleItem>
+                        <ToggleItem Value="value">读数从高到低</ToggleItem>
+                    </ToggleGroup>
+                    <CodeBlock Code="@QueryCode" Lang="csharp" Copyable="false" />
+                </Stage>
+                <Side>
+                    @if (paged is not null)
+                    {
+                        <Flex Align="ItemAlign.Center" Justify="ContentJustify.Between" Gap="SpaceScale.Sm" Wrap="true">
+                            <Small Tone="TextTone.Muted">共 @paged.Total 条，第 @paged.PageIndex / @TotalPages 页</Small>
+                            <Flex Gap="SpaceScale.Xs">
+                                <Button Size="Size.Sm" Variant="ButtonVariant.Soft" Tone="Tone.Neutral" Icon="Lucide.ChevronLeft" Disabled="@(pageIndex <= 1)" @onclick="Prev">上一页</Button>
+                                <Button Size="Size.Sm" Variant="ButtonVariant.Soft" Tone="Tone.Neutral" Icon="Lucide.ChevronRight" Disabled="@(pageIndex >= TotalPages)" @onclick="Next">下一页</Button>
+                            </Flex>
+                        </Flex>
+                        <Table Density="TableDensity.Compact" Striped="true" aria-label="查询结果">
+                            <TableHead>
+                                <TableRow>
+                                    <TableHeaderCell>设备</TableHeaderCell>
+                                    <TableHeaderCell>量</TableHeaderCell>
+                                    <TableHeaderCell Align="TableAlign.End">读数</TableHeaderCell>
+                                    <TableHeaderCell>时间</TableHeaderCell>
+                                </TableRow>
+                            </TableHead>
+                            <TableBody>
+                                @foreach (var (row, i) in paged.Rows.Select((row, i) => (row, i)))
+                                {
+                                    <TableRow @key="@($"{pageIndex}-{i}")">
+                                        <TableCell>@row.Device</TableCell>
+                                        <TableCell>@row.Tag</TableCell>
+                                        <TableCell Align="TableAlign.End">@row.Value</TableCell>
+                                        <TableCell NoWrap="true">@row.At.ToString("HH:mm:ss")</TableCell>
+                                    </TableRow>
+                                }
+                            </TableBody>
+                        </Table>
+                    }
+                    else
+                    {
+                        <Paragraph Tone="TextTone.Muted">（还没有数据：点“生成示例数据”，或改一个条件）</Paragraph>
+                    }
+                    <SqlLogView Count="2" />
+                    <Narration Mood="🎛">
+                        注意上面的 SQL：<strong>不勾选的条件根本不会出现在 WHERE 里</strong>（<Code>WhereIf</Code> 为 false 时整句跳过）；分页会发<strong>两条</strong> SQL，一条 <Code>COUNT(*)</Code> 查总数，一条带 <Code>LIMIT / OFFSET</Code> 取这一页；"设备"那一列来自导航属性 <Code>r.Device!.Name</Code>，生成了 LEFT JOIN。
+                        所有值都是 <Code>?</Code> 参数，不会有注入问题。
+                    </Narration>
+                </Side>
+            </Demo>
+
+            <Demo Title="演示 2：导航属性——JOIN、EXISTS、子查询都不用手写">
+                <Stage>
+                    <ToggleGroup @bind-Value="navKey" @bind-Value:after="RunNav" Required="true" aria-label="选一种导航查询">
+                        <ToggleItem Value="join">对一导航 → JOIN</ToggleItem>
+                        <ToggleItem Value="exists">集合导航 → EXISTS</ToggleItem>
+                        <ToggleItem Value="count">统计投影 → 子查询</ToggleItem>
+                    </ToggleGroup>
+                    <CodeBlock @key="@($"code-{navKey}")" Code="@NavCode" Lang="csharp" Copyable="false" />
+                    <Narration @key="@($"note-{navKey}")" Mood="🧭">@((MarkupString)NavNote)</Narration>
+                </Stage>
+                <Side>
+                    <IconLabel Icon="Lucide.ListChecks">查询结果</IconLabel>
+                    <Flex Direction="LayoutDirection.Column" Gap="SpaceScale.Xs">
+                        @foreach (var (line, i) in navLines.Select((l, i) => (l, i)))
+                        {
+                            <Code @key="@($"{navKey}{i}")">@line</Code>
+                        }
+                    </Flex>
+                    <SqlLogView Count="2" />
+                </Side>
+            </Demo>
+
+            <Quiz Question="Lambda 里写 r.Device!.Location == 「A 车间」（Device 是 Reading 的对一导航），SQL 里会是什么？" Options="@(new[] { "先查出所有采样再在内存里过滤", "自动 LEFT JOIN 设备表，WHERE 里比较 location 列", "报错，必须手写 JOIN" })" Answer="1"
+                  Explain="导航属性写在条件里，库会生成隐式 JOIN，过滤在数据库里完成，只把需要的行取回来。这正是用 ORM 比自己循环查询更快的地方（避免 N+1 次查询）。" />
+        </DbGate>
+    </ChildContent>
+</LessonPage>
+
+@code {
+    sealed record ReadingRow(string Device, string Tag, double Value, DateTime At);
+
+    sealed record DeviceStat(string Name, string Location, int Samples);
+
+    string deviceKey = "0";
+    string tag = "temperature";
+    int minValue = 0;
+    string order = "time";
+    int pageIndex = 1;
+    const int PageSize = 5;
+    EasyQuerySharp.Querying.Page<ReadingRow>? paged;
+
+    long TotalPages => paged is null ? 1 : Math.Max(1, (paged.Total + PageSize - 1) / PageSize);
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (await Db.EnsureReadyAsync())
+        {
+            await Reload();
+            await RunNav();
+        }
+    }
+
+    async Task SeedAsync()
+    {
+        await Db.EnsureSampleReadingsAsync();
+        await ReloadFromFirstPage();
+        await RunNav();
+    }
+
+    async Task ReloadFromFirstPage()
+    {
+        pageIndex = 1;
+        await Reload();
+    }
+
+    async Task Prev() { pageIndex--; await Reload(); }
+
+    async Task Next() { pageIndex++; await Reload(); }
+
+    async Task Reload()
+    {
+        var deviceId = long.Parse(deviceKey);
+        var query = Db.Db.Query<Reading>()
+            .WhereIf(deviceId > 0, r => r.DeviceId == deviceId)
+            .Where(r => r.Tag == tag)
+            .WhereIf(minValue > 0, r => r.Value >= minValue);
+        query = order == "time" ? query.OrderByDescending(r => r.At) : query.OrderByDescending(r => r.Value);
+        paged = await query.ToPageAsync(pageIndex, PageSize, r => new ReadingRow(r.Device!.Name, r.Tag, r.Value, r.At));
+    }
+
+    string QueryCode => string.Join("\n",
+        "var paged = await db.Query<Reading>()",
+        $"    .WhereIf({deviceKey} > 0, r => r.DeviceId == {deviceKey})",
+        $"    .Where(r => r.Tag == \"{tag}\")",
+        $"    .WhereIf({minValue} > 0, r => r.Value >= {minValue})",
+        order == "time" ? "    .OrderByDescending(r => r.At)" : "    .OrderByDescending(r => r.Value)",
+        $"    .ToPageAsync({pageIndex}, {PageSize}, r => new ReadingRow(r.Device!.Name, r.Tag, r.Value, r.At));");
+
+    // ---- 演示 2 ----
+    string navKey = "join";
+    IReadOnlyList<string> navLines = [];
+
+    async Task RunNav()
+    {
+        var db = Db.Db;
+        switch (navKey)
+        {
+            case "join":
+                var rows = await db.Query<Reading>()
+                    .Where(r => r.Device!.Location == "B 车间" && r.Tag == "temperature")
+                    .OrderByDescending(r => r.At)
+                    .Select(r => new ReadingRow(r.Device!.Name, r.Tag, r.Value, r.At))
+                    .ToListAsync();
+                navLines = [.. rows.Take(5).Select(r => $"{r.Device}  {r.Value}  {r.At:HH:mm:ss}"), $"…共 {rows.Count} 条（B 车间的温度）"];
+                break;
+            case "exists":
+                var devices = await db.Query<Device>()
+                    .Where(d => d.Readings!.Any(r => r.Tag == "temperature" && r.Value > 75))
+                    .OrderBy(d => d.Id)
+                    .ToListAsync();
+                navLines = devices.Count == 0 ? ["没有设备出现过超过 75 的温度"] : [.. devices.Select(d => $"{d.Name}（{d.Location}）出现过温度 > 75")];
+                break;
+            default:
+                var stats = await db.Query<Device>()
+                    .OrderBy(d => d.Id)
+                    .Select(d => new DeviceStat(d.Name, d.Location, d.Readings!.Count()))
+                    .ToListAsync();
+                navLines = [.. stats.Select(s => $"{s.Name}（{s.Location}）：{s.Samples} 条采样")];
+                break;
+        }
+    }
+
+    string NavCode => navKey switch
+    {
+        "join" => """
+            db.Query<Reading>()
+                .Where(r => r.Device!.Location == "B 车间" && r.Tag == "temperature")   // 条件写在导航上
+                .OrderByDescending(r => r.At)
+                .Select(r => new ReadingRow(r.Device!.Name, r.Tag, r.Value, r.At))
+                .ToListAsync();
+            """,
+        "exists" => """
+            db.Query<Device>()
+                .Where(d => d.Readings!.Any(r => r.Tag == "temperature" && r.Value > 75))   // 有没有这样的采样
+                .OrderBy(d => d.Id)
+                .ToListAsync();
+            """,
+        _ => """
+            db.Query<Device>()
+                .Select(d => new DeviceStat(d.Name, d.Location, d.Readings!.Count()))   // 每台设备的采样数
+                .ToListAsync();
+            """,
+    };
+
+    string NavNote => navKey switch
+    {
+        "join" => "条件写在 <code>r.Device!.Location</code> 上：<strong>对一导航</strong>，生成 <code>LEFT JOIN t_device</code>，过滤在数据库完成。看右边的 SQL。",
+        "exists" => "<code>d.Readings!.Any(...)</code> 是<strong>集合导航</strong>：生成 <code>EXISTS (SELECT 1 FROM t_reading ...)</code> 子查询。「有没有」这类问题用它，比先 JOIN 再去重更清楚。",
+        _ => "投影里的 <code>d.Readings!.Count()</code> 生成<strong>标量子查询</strong>：每台设备一行，采样数在 SQL 里算好，不会把全部采样取回内存再数。",
+    };
+
+}

@@ -58,6 +58,19 @@
 
 页面里显示的数字都是 C# 当场计算出来的，不是写死的动画。
 
+## 数据库课程（「数据库」与「综合实战」）
+
+这几课连的是 WSL 里 Docker 中的 PostgreSQL（EasyQuerySharp 项目自带的开发库），真实读写，不是模拟：
+
+1. 启动数据库：在 EasyQuerySharp 目录里执行 `bash infra/dev/db.sh up -d`（端口 45432）。
+2. 建一个学习站专用的库和账号（只需一次；密码自己定，不要提交）：
+   `wsl -d Debian --exec docker exec easy-query-sharp-dev-postgres-1 psql -U postgres -c "CREATE ROLE learnsite LOGIN PASSWORD '你的密码'" -c "CREATE DATABASE learnsite OWNER learnsite"`
+3. 把连接串放进用户目录的 `.learnsite\connection.txt`（或环境变量 `LEARNSITE_PG`）：
+   `Host=127.0.0.1;Port=45432;Username=learnsite;Password=你的密码;Database=learnsite`
+
+表和示例设备在第一次进入这些页面时自动创建（EasyQuerySharp 的 CodeFirst）。库没启动时页面会显示原因和启动命令。
+EasyQuerySharp 目前是**本地项目引用**（`..\..\EasyQuerySharp`），验证完后改回 nuget.org 的正式版本。
+
 ## 关于组件库
 
 默认使用 nuget.org 上已发布的 `RuneForBlazor.*`（0.17.0）。如果需要改组件库：在 `RuneForBlazor` 仓库改好后，

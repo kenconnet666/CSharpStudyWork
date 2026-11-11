@@ -1,0 +1,153 @@
+@page "/collect"
+@using LearnSite.Data
+@using LearnSite.Services
+@implements IAsyncDisposable
+@inherits RuneComponent
+@inject LearnDb Db
+
+@*
+    数据 4：采集数据怎么落库——轮询 → Channel 队列 → 批量写入。设备是本机模拟的真实 Modbus TCP 设备，数据真的写进 PostgreSQL。
+*@
+
+<LessonPage Title="采集落库：轮询、队列、批量写入">
+    <Intro>
+        把前面学的串起来：<strong>读设备</strong>（Modbus 轮询）→ <strong>放进队列</strong>（<Code>Channel</Code>）→ <strong>批量写库</strong>（EasyQuerySharp）。
+        为什么中间要放一个队列？因为<strong>读设备</strong>和<strong>写数据库</strong>两件事的节奏、速度、出错方式都不一样，用队列把它们隔开，谁慢谁卡都不会连累另一边。
+    </Intro>
+    <ChildContent>
+        <ConceptGuide>
+            <Concept Term="生产者—消费者" Analogy="餐厅的传菜口：厨师（生产者）做好菜放到传菜口，服务员（消费者）有空就来取。厨师不用等服务员，服务员也不用盯着厨师。">
+                轮询任务是生产者，每次读到数据就放进队列；写库任务是消费者，每隔一会儿把队列里攒下的全部取走。数据库偶尔慢一下，队列会变长，但采集不会被拖慢，也不丢数据。
+            </Concept>
+            <Concept Term="Channel&lt;T&gt;" Analogy="一条线程安全的传送带：一头放、一头取，多个线程同时用也不会乱。" Compare="相当于 Java 的 BlockingQueue，但天然支持 async / await，不阻塞线程。">
+                <Code>channel.Writer.TryWrite(x)</Code> 放入，<Code>channel.Reader.TryRead(out x)</Code> 取出。无界的 Channel 永远写得进去，所以要关注队列长度，别让它无限增长。
+            </Concept>
+            <Concept Term="批量落库的节奏" Analogy="快递员不会每收一个包裹就跑一趟，而是攒到一车再走。">
+                写入间隔是一个权衡：<strong>间隔短</strong>，数据落库及时，但批次小、写得频繁；<strong>间隔长</strong>，每批大、效率高，但程序崩溃时队列里还没写的数据会丢。上位机里常见 0.5~5 秒。停止时要把队列里剩下的写完（演示里的停止就会这样做）。
+            </Concept>
+            <Concept Term="超时、重试、断线重连" Analogy="打电话没人接，重拨几次还不通，就先挂断，隔一会儿再拨（间隔越来越长）。">
+                和「轮询与断线重连」一课一样：每次读设备都带超时；连续 3 次失败判定断线，关掉旧连接重连，失败时等 1、2、4 秒再试。区别是这次连的是一台真的在回应的 TCP 服务端。
+            </Concept>
+        </ConceptGuide>
+
+        <DbGate>
+            <Demo Title="演示：设备 → 队列 → 数据库，真实在跑">
+                <Stage>
+                    <Flex Gap="SpaceScale.Sm" Wrap="true">
+                        <Button Icon="@(running ? Lucide.Square : Lucide.Play)" @onclick="Toggle">@(running ? "停止采集（并写完队列）" : "开始采集")</Button>
+                        <Button Variant="ButtonVariant.Soft" Tone="@(silent ? Tone.Success : Tone.Danger)" Icon="@(silent ? Lucide.Plug : Lucide.Unplug)" @onclick="ToggleSilent">@(silent ? "恢复设备通信" : "让设备不再回应")</Button>
+                        <Button Variant="ButtonVariant.Ghost" Tone="Tone.Neutral" Icon="Lucide.Eraser" @onclick="ClearData">清空采样表</Button>
+                    </Flex>
+                    <Field Label="@($"轮询间隔 {pollMs} 毫秒")"><Slider TValue="int" @bind-Value="pollMs" @bind-Value:after="ApplySettings" Min="100" Max="1000" Step="100" /></Field>
+                    <Field Label="@($"批量写入间隔 {batchMs} 毫秒")"><Slider TValue="int" @bind-Value="batchMs" @bind-Value:after="ApplySettings" Min="500" Max="5000" Step="500" /></Field>
+                    <Grid MinItemWidth="CssLength.Rem(11)" Gap="SpaceScale.Sm">
+                        <Slot Name="采集状态" Data="@collector.State" Changed="@running" />
+                        <Slot Name="最新温度" Data="@(collector.Temperature is { } t ? $"{t:F1} ℃" : "—")" />
+                        <Slot Name="已轮询" Data="@collector.Polled.ToString()" />
+                        <Slot Name="队列里等着写" Data="@collector.Queued.ToString()" Changed="@(collector.Queued > 0)" />
+                        <Slot Name="已写入数据库" Data="@collector.Written.ToString()" Changed="@(collector.Written > 0)" />
+                        <Slot Name="批次数 / 上批条数" Data="@($"{collector.Batches} / {collector.LastBatchSize}")" />
+                    </Grid>
+                    <CodeBlock Code="@PipelineCode" Lang="csharp" Copyable="false" />
+                </Stage>
+                <Side>
+                    <LineChart Items="trend" Category="p => p.Index" Series="trendSeries" Unit="℃" Height="200" aria-label="最近 60 次轮询的温度" />
+                    <SqlLogView Count="2" Title="最近的批量写入 SQL" />
+                    <Narration @key="@collector.State" Mood="@(collector.State.StartsWith("重连") || collector.State == "超时重试" ? "🚨" : "📊")">
+                        @if (!running)
+                        {
+                            <text>点“开始采集”：每轮询一次，温度和压力两条记录就进队列；“已写入数据库”每隔一个批量间隔跳一大步，而不是一条条涨——这就是批量。</text>
+                        }
+                        else if (collector.State == "运行中")
+                        {
+                            <text>正常运行：队列长度会在 0 和一批之间起伏。把<strong>批量写入间隔调大</strong>，队列会变长、每批条数变多；<strong>停止采集</strong>时会把队列里剩下的写完。试试点“让设备不再回应”。</text>
+                        }
+                        else
+                        {
+                            <text>设备不回应了：每次读取等 600 毫秒超时，<strong>连续 3 次失败就判定断线</strong>，关闭连接按 1、2、4 秒的间隔重连。注意这期间队列不再增长，但已经在队列里的数据仍会照常写入数据库。点“恢复设备通信”，会自动连回来。</text>
+                        }
+                    </Narration>
+                </Side>
+            </Demo>
+
+            <Quiz Question="数据库短暂卡了 2 秒，采集程序里有队列，会发生什么？" Options="@(new[] { "轮询也跟着卡住 2 秒，读不到设备数据", "轮询照常进行，数据暂存在队列里，数据库恢复后一次写入", "这 2 秒的数据直接丢失" })" Answer="1"
+                  Explain="队列把「读设备」和「写库」隔开了：写库卡住只是队列变长，轮询继续。这是上位机不丢数据、不卡界面的关键结构。队列要设一个上限和告警，避免数据库长时间不可用时内存无限增长。" />
+        </DbGate>
+    </ChildContent>
+</LessonPage>
+
+@code {
+    SimulatedPlant plant = default!;
+    DeviceCollector collector = default!;
+    bool running;
+    bool silent;
+    int pollMs = 500;
+    int batchMs = 1000;
+
+    sealed record TrendPoint(int Index, decimal Temperature);
+
+    static readonly ChartSeries<TrendPoint>[] trendSeries = [new("temperature", "温度", p => p.Temperature)];
+
+    IReadOnlyList<TrendPoint> trend = [];
+
+    protected override void OnInitialized()
+    {
+        // 示例设备按顺序建，第一台的 id 是 1；采集器只在库就绪后才会用到数据库
+        plant = new SimulatedPlant(Db);
+        collector = plant.Collector;
+        collector.Changed += OnCollectorChanged;
+        ApplySettings();
+    }
+
+    void OnCollectorChanged() => _ = InvokeAsync(() =>
+    {
+        trend = [.. collector.Trend().Temperatures.Select((t, i) => new TrendPoint(i + 1, (decimal)t))];
+        StateHasChanged();
+    });
+
+    void ApplySettings()
+    {
+        collector.PollInterval = TimeSpan.FromMilliseconds(pollMs);
+        collector.BatchInterval = TimeSpan.FromMilliseconds(batchMs);
+    }
+
+    async Task Toggle()
+    {
+        if (running)
+        {
+            await collector.StopAsync();
+            running = false;
+        }
+        else
+        {
+            collector.Start();
+            running = true;
+        }
+    }
+
+    void ToggleSilent()
+    {
+        silent = !silent;
+        plant.DeviceSilent = silent;
+    }
+
+    async Task ClearData() => await Db.ResetDataAsync();
+
+    const string PipelineCode = """
+        // 生产者：轮询设备，放进队列
+        var registers = ModbusCodec.ParseRegisters(await modbus.RequestAsync(frame, timeout));
+        queue.Writer.TryWrite(new Reading { DeviceId = id, Tag = "temperature", Value = registers[0] / 10.0, At = now });
+
+        // 消费者：每隔一会儿，把队列里攒下的批量写进数据库
+        await Task.Delay(batchInterval, token);
+        List<Reading> batch = [];
+        while (queue.Reader.TryRead(out var r)) batch.Add(r);
+        await db.Insert(batch).Batch().ExecuteAsync();
+        """;
+
+    public async ValueTask DisposeAsync()
+    {
+        collector.Changed -= OnCollectorChanged;
+        await plant.DisposeAsync();
+    }
+}

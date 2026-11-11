@@ -1,0 +1,251 @@
+@page "/writes"
+@using System.Diagnostics
+@using LearnSite.Data
+@inherits RuneComponent
+@inject LearnDb Db
+
+@*
+    数据 3：写入与事务。演示 1：增、改、删；演示 2：批量写入为什么快；演示 3：事务——出错时要么全成功、要么全不变。
+*@
+
+<LessonPage Title="写入与事务：存数据，并保证不存一半">
+    <Intro>
+        上位机最频繁的数据库操作其实是<strong>写</strong>：每秒入库几十上百条采样。写入有两个关键问题：<strong>怎么写得快</strong>（批量），以及
+        <strong>写到一半出错了怎么办</strong>（事务）。这一课用真实的数据库把这两件事都跑一遍。
+    </Intro>
+    <ChildContent>
+        <ConceptGuide>
+            <Concept Term="增、改、删" Analogy="对应表格里的「加一行、改某几行、删某几行」。">
+                <Code>db.Insert(实体)</Code>、<Code>db.Update&lt;T&gt;().Set(...).Where(...)</Code>、<Code>db.Delete&lt;T&gt;().Where(...)</Code>，最后都要 <Code>ExecuteAsync()</Code> 才真正执行，返回受影响的行数。
+                <strong>改和删一定要带 Where</strong>，否则就是整张表。
+            </Concept>
+            <Concept Term="批量写入" Analogy="寄快递：一件件跑邮局寄，和打包一次寄走，快慢差很多。">
+                逐条写入每条都是一次「发 SQL → 等数据库回复」的往返；<Code>.Batch()</Code> 把同一条 SQL 的多行一次发出。采样数据这种大量的同类记录，一定要批量。
+            </Concept>
+            <Concept Term="事务（Transaction）" Analogy="银行转账：A 扣钱和 B 加钱必须一起成功，否则就当什么都没发生，不能出现「钱扣了，对方没收到」。">
+                把一组操作包成一个事务：<strong>全部成功才提交，任何一步出错就全部回滚</strong>，数据库回到事务开始前的样子。这个性质叫<strong>原子性</strong>。上位机里比如「写入一批采样 + 更新设备最后在线时间」就应该放进同一个事务。
+            </Concept>
+            <Concept Term="外键约束" Analogy="登记表上写的「所属设备」必须是真实存在的设备，数据库会替你把关。">
+                采样表的 <Code>device_id</Code> 是指向设备表的外键，写一个不存在的设备编号会被数据库拒绝。演示 3 用它故意制造一次出错。
+            </Concept>
+        </ConceptGuide>
+
+        <DbGate>
+            <Demo Title="演示 1：增、改、删">
+                <Stage>
+                    <Paragraph Tone="TextTone.Muted">下面三个按钮操作的是标记为 <Code>sandbox</Code> 的几行，互不影响其它数据。从上往下点：</Paragraph>
+                    <Flex Gap="SpaceScale.Sm" Wrap="true">
+                        <Button Icon="Lucide.Plus" @onclick="InsertThree">插入 3 条</Button>
+                        <Button Variant="ButtonVariant.Soft" Icon="Lucide.Pencil" @onclick="UpdateToZero">把读数全改成 0</Button>
+                        <Button Variant="ButtonVariant.Soft" Tone="Tone.Danger" Icon="Lucide.Trash" @onclick="DeleteAll">删除</Button>
+                    </Flex>
+                    <IconLabel Icon="Lucide.Table">现在库里的 sandbox 行</IconLabel>
+                    <Flex Direction="LayoutDirection.Column" Gap="SpaceScale.Xs">
+                        @if (sandbox.Count == 0)
+                        {
+                            <Paragraph Tone="TextTone.Muted">（没有）</Paragraph>
+                        }
+                        @foreach (var r in sandbox)
+                        {
+                            <Code @key="r.Id">id=@r.Id  设备=@r.DeviceId  读数=@r.Value  @r.At.ToString("HH:mm:ss")</Code>
+                        }
+                    </Flex>
+                    <CodeBlock Code="@CrudCode" Lang="csharp" Copyable="false" />
+                </Stage>
+                <Side>
+                    <SqlLogView Count="3" />
+                    <Narration Mood="📝">
+                        <strong>改和删的 SQL 都带着 WHERE</strong>。插入后主键 <Code>id</Code> 是数据库自动生成的（<Code>Generated = true</Code>），这里用 <Code>FillGeneratedKeys()</Code> 把它取回来显示。
+                        每条 SQL 的参数都用 <Code>?</Code> 占位，值单独传给数据库，不会被当成 SQL 指令。
+                    </Narration>
+                </Side>
+            </Demo>
+
+            <Demo Title="演示 2：逐条写 vs 批量写">
+                <Stage>
+                    <Field Label="@($"写入条数 {count}")">
+                        <Slider TValue="int" @bind-Value="count" Min="100" Max="3000" Step="100" />
+                    </Field>
+                    <Flex Gap="SpaceScale.Sm" Wrap="true">
+                        <Button Icon="Lucide.Rows3" @onclick="OneByOne">逐条插入</Button>
+                        <Button Icon="Lucide.Layers" @onclick="BatchInsert">Batch 批量插入</Button>
+                    </Flex>
+                    <Grid MinItemWidth="CssLength.Rem(12)" Gap="SpaceScale.Sm">
+                        <Readout Title="逐条插入" Value="@(oneByOneMs is null ? "—" : $"{oneByOneMs:F0} 毫秒")" />
+                        <Readout Title="Batch 批量插入" Value="@(batchMs is null ? "—" : $"{batchMs:F0} 毫秒")" />
+                        <Readout Title="批量快了" Value="@(oneByOneMs is > 0 && batchMs is > 0 ? $"{oneByOneMs / batchMs:F1} 倍" : "—")" />
+                    </Grid>
+                    <CodeBlock Code="@BatchCode" Lang="csharp" Copyable="false" />
+                </Stage>
+                <Side>
+                    <Narration Mood="⏱">
+                        数据库和程序在同一台机器上，往返已经很快，差距仍然明显；<strong>真实现场数据库在另一台服务器上时，每次往返还要再加几毫秒网络时间，逐条写更不可接受</strong>。
+                        每次测完这些测试行会自动删掉，不会留在库里。
+                    </Narration>
+                </Side>
+            </Demo>
+
+            <Demo Title="演示 3：事务——写到第 15 条出错了，前面的 14 条怎么办？">
+                <Stage>
+                    <Paragraph Tone="TextTone.Muted">写入 20 条采样，其中第 15 条故意用一个不存在的设备编号，触发外键错误。比较两种写法：</Paragraph>
+                    <ToggleGroup @bind-Value="txKey" Required="true" aria-label="事务方式">
+                        <ToggleItem Value="none">不用事务</ToggleItem>
+                        <ToggleItem Value="tx">用事务</ToggleItem>
+                    </ToggleGroup>
+                    <Flex Gap="SpaceScale.Sm" Wrap="true">
+                        <Button Icon="Lucide.Play" @onclick="RunTx">写入 20 条（第 15 条出错）</Button>
+                    </Flex>
+                    <Grid MinItemWidth="CssLength.Rem(12)" Gap="SpaceScale.Sm">
+                        <Slot Name="出错后库里留下的行数" Data="@(leftover?.ToString() ?? "—")" Changed="@(leftover is > 0)" />
+                    </Grid>
+                    <CodeBlock Code="@TxCode" Lang="csharp" Copyable="false" />
+                </Stage>
+                <Side>
+                    <SqlLogView Count="2" />
+                    <Narration @key="@($"{txKey}{leftover}")" Mood="@(leftover is > 0 ? "💥" : "✅")">
+                        @if (leftover is null)
+                        {
+                            <text>先选一种方式再点按钮，看出错之后库里剩下几行。</text>
+                        }
+                        else if (leftover > 0)
+                        {
+                            <text>没有事务：前 14 条已经<strong>各自提交</strong>写进了库，第 15 条出错后程序停了，库里留下了<strong>一半的数据</strong>。这样的半截数据最难排查。</text>
+                        }
+                        else
+                        {
+                            <text>用了事务：第 15 条出错，数据库把前面 14 条也<strong>一起回滚</strong>，库里一行都没留下，好像什么都没发生过。要么全有，要么全无。</text>
+                        }
+                    </Narration>
+                    @if (txError is not null)
+                    {
+                        <Alert Tone="Tone.Danger" Icon="Lucide.CircleX" Label="数据库返回的错误">@txError</Alert>
+                    }
+                </Side>
+            </Demo>
+
+            <Quiz Question="事务里做了 5 步操作，第 4 步抛了异常，最后数据库里是什么样？" Options="@(new[] { "前 3 步的结果保留，后面的没做", "5 步都没生效，回到事务开始前", "第 4 步之前的和之后的都保留" })" Answer="1"
+                  Explain="事务是整体：只有全部成功才提交，中途出错就整体回滚。这正是用事务保护「一组必须一起完成的操作」的意义。" />
+        </DbGate>
+    </ChildContent>
+</LessonPage>
+
+@code {
+    // ---- 演示 1 ----
+    List<Reading> sandbox = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (await Db.EnsureReadyAsync()) await RefreshSandbox();
+    }
+
+    async Task RefreshSandbox() =>
+        sandbox = await Db.Db.Query<Reading>().Where(r => r.Tag == "sandbox").OrderBy(r => r.Id).ToListAsync();
+
+    async Task InsertThree()
+    {
+        Reading[] rows = [.. Enumerable.Range(1, 3).Select(i => new Reading { DeviceId = 1, Tag = "sandbox", Value = 20 + i, At = Clock.Now })];
+        await Db.Db.Insert(rows).FillGeneratedKeys().ExecuteAsync();
+        await RefreshSandbox();
+    }
+
+    async Task UpdateToZero()
+    {
+        await Db.Db.Update<Reading>().Set(r => r.Value, 0.0).Where(r => r.Tag == "sandbox").ExecuteAsync();
+        await RefreshSandbox();
+    }
+
+    async Task DeleteAll()
+    {
+        await Db.Db.Delete<Reading>().Where(r => r.Tag == "sandbox").ExecuteAsync();
+        await RefreshSandbox();
+    }
+
+    const string CrudCode = """
+        // 增：数据库生成的主键回填到对象
+        await db.Insert(rows).FillGeneratedKeys().ExecuteAsync();
+
+        // 改：Set 要改什么，Where 改哪些行
+        await db.Update<Reading>().Set(r => r.Value, 0.0).Where(r => r.Tag == "sandbox").ExecuteAsync();
+
+        // 删
+        await db.Delete<Reading>().Where(r => r.Tag == "sandbox").ExecuteAsync();
+        """;
+
+    // ---- 演示 2 ----
+    int count = 1000;
+    double? oneByOneMs;
+    double? batchMs;
+
+    Reading[] BenchRows() =>
+        [.. Enumerable.Range(0, count).Select(i => new Reading { DeviceId = 1, Tag = "bench", Value = i, At = Clock.Now })];
+
+    async Task OneByOne()
+    {
+        var rows = BenchRows();
+        var watch = Stopwatch.StartNew();
+        foreach (var row in rows) await Db.Db.Insert(row).ExecuteAsync();
+        oneByOneMs = watch.Elapsed.TotalMilliseconds;
+        await Db.Db.Delete<Reading>().Where(r => r.Tag == "bench").ExecuteAsync();
+    }
+
+    async Task BatchInsert()
+    {
+        var rows = BenchRows();
+        var watch = Stopwatch.StartNew();
+        await Db.Db.Insert(rows).Batch().ExecuteAsync();
+        batchMs = watch.Elapsed.TotalMilliseconds;
+        await Db.Db.Delete<Reading>().Where(r => r.Tag == "bench").ExecuteAsync();
+    }
+
+    string BatchCode => string.Join("\n",
+        $"Reading[] rows = ...;                       // {count} 条",
+        "",
+        "// 逐条：每条一次往返",
+        "foreach (var row in rows) await db.Insert(row).ExecuteAsync();",
+        "",
+        "// 批量：同一条 SQL 的多行一次发出",
+        "await db.Insert(rows).Batch().ExecuteAsync();");
+
+    // ---- 演示 3 ----
+    string txKey = "none";
+    long? leftover;
+    string? txError;
+
+    async Task RunTx()
+    {
+        txError = null;
+        await Db.Db.Delete<Reading>().Where(r => r.Tag == "tx-demo").ExecuteAsync();
+        Reading[] rows = [.. Enumerable.Range(1, 20).Select(i => new Reading { DeviceId = i == 15 ? 9999 : 1, Tag = "tx-demo", Value = i, At = Clock.Now })];
+
+        try
+        {
+            if (txKey == "tx")
+                await Db.Db.TransactionAsync(async () =>
+                {
+                    foreach (var row in rows) await Db.Db.Insert(row).ExecuteAsync();
+                });
+            else
+                foreach (var row in rows) await Db.Db.Insert(row).ExecuteAsync();
+        }
+        catch (Exception ex)
+        {
+            txError = ex.GetBaseException().Message;
+        }
+
+        leftover = await Db.Db.Query<Reading>().Where(r => r.Tag == "tx-demo").CountAsync();
+        await Db.Db.Delete<Reading>().Where(r => r.Tag == "tx-demo").ExecuteAsync();
+    }
+
+    string TxCode => txKey == "tx"
+        ? """
+          await db.TransactionAsync(async () =>
+          {
+              foreach (var row in rows)
+                  await db.Insert(row).ExecuteAsync();   // 第 15 条抛异常 → 整体回滚
+          });
+          """
+        : """
+          foreach (var row in rows)
+              await db.Insert(row).ExecuteAsync();       // 每条各自提交，第 15 条抛异常时前 14 条已经写进去了
+          """;
+}

@@ -1,0 +1,213 @@
+@page "/sql"
+@using LearnSite.Data
+@inherits RuneComponent
+@inject LearnDb Db
+
+@*
+    数据 1：表与 SQL 基础。连的是 WSL 里 PostgreSQL 的 learnsite 库，下面所有结果都是真实查出来的。
+    演示 1：执行 SQL 看结果；演示 2：为什么必须用参数，不能拼字符串（SQL 注入）。
+*@
+
+<LessonPage Title="表与 SQL：数据库里的数据长什么样">
+    <Intro>
+        上位机每秒都在采数据，不存下来就没有历史曲线、没有报表、也没法追溯某次报警。<strong>关系数据库</strong>把数据存成一张张<strong>表</strong>：
+        一行是一条记录，一列是一个属性。要读写它，就用 <strong>SQL</strong> 这门专门的语言。下面连的是真实的 PostgreSQL，结果都是当场查出来的。
+    </Intro>
+    <ChildContent>
+        <ConceptGuide>
+            <Concept Term="表、行、列、主键" Analogy="表是一张 Excel 工作表：每行一条记录，每列一个字段；主键是「身份证号」，每行一个，永不重复。" Compare="和 Java 里 JDBC 面对的表完全一样；区别只在 C# 用 ADO.NET 访问。">
+                我们有三张表：<Code>t_device</Code>（设备）、<Code>t_reading</Code>（采样值，每秒都会增长，是最大的一张）、<Code>t_alarm</Code>（报警）。
+                采样表里的 <Code>device_id</Code> 指向设备表的 <Code>id</Code>，这叫<strong>外键</strong>，把两张表关联起来。
+            </Concept>
+            <Concept Term="SELECT：查" Analogy="像在 Excel 里筛选加排序：选哪些列、满足什么条件、按什么排。">
+                <Code>SELECT 列 FROM 表 WHERE 条件 ORDER BY 排序 LIMIT 条数</Code>。<Code>GROUP BY</Code> 按某列分组再统计（平均、最大值、个数），<Code>JOIN</Code> 把两张表按外键拼在一起。
+            </Concept>
+            <Concept Term="索引" Analogy="书后面的目录：不用一页页翻，直接按页码跳过去。">
+                采样表有几十万、几百万行时，按「设备 + 时间」查必须靠索引，否则就是全表扫描。写入时索引要多维护一份，所以只给<strong>经常查询的列</strong>建。本课的采样表已经按（设备、时间倒序）建了索引，下面可以直接看到。
+            </Concept>
+            <Concept Term="参数化查询" Analogy="填表格：把「值」写在表格的格子里，而不是把值直接写进指令正文里，这样值里夹带的「指令」就不会被执行。">
+                永远不要把用户输入<strong>拼进</strong> SQL 字符串。用参数（<Code>@@name</Code>）传值，数据库会把它当成纯数据。演示 2 会让你亲眼看到拼接的后果。
+            </Concept>
+        </ConceptGuide>
+
+        <DbGate>
+            <Demo Title="演示 1：执行 SQL，看真实结果">
+                <Stage>
+                    <ToggleGroup @bind-Value="PresetKey" Required="true" aria-label="选一条示例 SQL">
+                        @foreach (var p in Presets)
+                        {
+                            <ToggleItem Value="@p.Key">@p.Label</ToggleItem>
+                        }
+                    </ToggleGroup>
+                    <Field Label="SQL（可以自己改；这里是只读事务，写操作会被数据库拒绝）">
+                        <Textarea @bind-Value="sql" Rows="5" />
+                    </Field>
+                    <Flex Gap="SpaceScale.Sm" Wrap="true">
+                        <Button Icon="Lucide.Play" Disabled="@busy" @onclick="Run">执行</Button>
+                        <Button Variant="ButtonVariant.Soft" Tone="Tone.Neutral" Icon="Lucide.Sprout" Disabled="@busy" @onclick="Seed">生成示例数据（3 台设备 × 10 分钟）</Button>
+                    </Flex>
+                    @if (error is not null)
+                    {
+                        <Alert Tone="Tone.Danger" Icon="Lucide.CircleX" Label="执行出错">@error</Alert>
+                    }
+                </Stage>
+                <Side>
+                    <ResultTable Result="result" />
+                    <Narration @key="presetKey" Mood="🔎">@((MarkupString)Current.Note)</Narration>
+                </Side>
+            </Demo>
+
+            <Demo Title="演示 2：为什么必须用参数——SQL 注入">
+                <Stage>
+                    <Paragraph Tone="TextTone.Muted">按设备名查设备。先输入正常的名字，再试试这段「恶意输入」：<Code>x' OR '1'='1</Code></Paragraph>
+                    <Field Label="设备名">
+                        <TextField @bind-Value="nameInput" />
+                    </Field>
+                    <Flex Gap="SpaceScale.Sm" Wrap="true">
+                        <Button Icon="Lucide.Search" Disabled="@busy" @onclick="Injection">两种写法都查一次</Button>
+                        <Button Variant="ButtonVariant.Soft" Tone="Tone.Danger" Icon="Lucide.Bug" @onclick="FillMalicious">填入恶意输入</Button>
+                    </Flex>
+                    <CodeBlock Code="@InjectionCode" Lang="csharp" Copyable="false" />
+                </Stage>
+                <Side>
+                    <IconLabel Icon="Lucide.ShieldExclamationPoint">拼接字符串（危险）</IconLabel>
+                    <CodeBlock Code="@ConcatSql" Lang="sql" Copyable="false" />
+                    <Slot Name="查到的行数" Data="@(concatRows?.ToString() ?? "—")" Changed="@(concatRows > 1)" />
+                    <IconLabel Icon="Lucide.ShieldCheck">参数化（安全）</IconLabel>
+                    <CodeBlock Code="SELECT id, name FROM t_device WHERE name = @@name" Lang="sql" Copyable="false" />
+                    <Slot Name="查到的行数" Data="@(paramRows?.ToString() ?? "—")" />
+                    <Narration @key="@($"{concatRows}{paramRows}")" Mood="@(concatRows > 1 ? "🚨" : "💡")">
+                        @if (concatRows > 1)
+                        {
+                            <text>拼接版里，恶意输入里的引号把 SQL 的结构改了，<Code>OR '1'='1'</Code> 永远成立，<strong>把整张表都查出来了</strong>。换成 <Code>DELETE</Code> 就是灾难。参数化版把它当成一个奇怪的设备名，老老实实查不到。</text>
+                        }
+                        else
+                        {
+                            <text>输入正常时两种写法结果一样，所以拼接的隐患平时看不出来。点「填入恶意输入」再查一次，对比两边的行数。</text>
+                        }
+                    </Narration>
+                </Side>
+            </Demo>
+
+            <Demo Title="用 C# 执行 SQL（ADO.NET）">
+                <Stage>
+                    <CodeBlock Code="@AdoCode" Lang="csharp" Copyable="false" />
+                </Stage>
+                <Side>
+                    <Narration Mood="🧰">
+                        ADO.NET 是 .NET 访问数据库的基础接口（对应 Java 的 JDBC）：<Code>DataSource</Code> 管连接池，<Code>Command</Code> 装 SQL 和参数，<Code>Reader</Code> 一行行读结果。
+                        演示 1 用的就是它。上位机里更常用的是下一课的 EasyQuerySharp——它在 ADO.NET 之上，把 SQL 换成类型安全的 C# 表达式。
+                    </Narration>
+                    <Quiz Question="把用户输入直接拼进 SQL 字符串，最大的风险是？" Options="@(new[] { "查询变慢", "SQL 注入：输入里的内容被当成 SQL 指令执行", "表会变大" })" Answer="1"
+                          Explain="拼接让用户输入有机会改变 SQL 的结构。永远用参数传值；表名、列名这种不能参数化的地方，用白名单限定。" />
+                </Side>
+            </Demo>
+        </DbGate>
+    </ChildContent>
+</LessonPage>
+
+@code {
+    sealed record Preset(string Key, string Label, string Sql, string Note);
+
+    static readonly Preset[] Presets =
+    [
+        new("devices", "全部设备", "SELECT id, name, location\nFROM t_device\nORDER BY id",
+            "最简单的查询：选 3 列、按 id 排序。<code>id</code> 是主键，由数据库自动生成。"),
+        new("latest", "最近 5 条温度", "SELECT at, value\nFROM t_reading\nWHERE device_id = 1 AND tag = 'temperature'\nORDER BY at DESC\nLIMIT 5",
+            "<code>WHERE</code> 过滤出设备 1 的温度，<code>ORDER BY at DESC</code> 时间倒序，<code>LIMIT 5</code> 只取前 5 条。采样表有（设备、时间倒序）索引，这类查询很快。没有数据的话先点“生成示例数据”。"),
+        new("group", "每台设备的平均温度", "SELECT d.name, ROUND(AVG(r.value)::numeric, 1) AS avg_temp, COUNT(*) AS n\nFROM t_reading r\nJOIN t_device d ON d.id = r.device_id\nWHERE r.tag = 'temperature'\nGROUP BY d.name\nORDER BY avg_temp DESC",
+            "<code>JOIN</code> 用外键把采样表和设备表拼起来，<code>GROUP BY d.name</code> 每台设备一组，<code>AVG</code>、<code>COUNT</code> 对每组统计。报表基本都是这个套路。"),
+        new("indexes", "看采样表的索引", "SELECT indexname, indexdef\nFROM pg_indexes\nWHERE tablename = 't_reading'",
+            "这是 EasyQuerySharp 按实体上的 <code>[TableIndex]</code> 建表时一起建的索引：先按设备、再按时间倒序，正好对应「某台设备最近的数据」这类最常见的查询。"),
+        new("explain", "看执行计划", "EXPLAIN\nSELECT * FROM t_reading\nWHERE device_id = 1 AND at > now()::timestamp - interval '5 minutes'",
+            "<code>EXPLAIN</code> 不执行查询，只显示数据库打算怎么查。看计划里的 <code>Index Scan</code>：数据库用了上面那条（设备、时间）索引，只去翻符合条件的那一小块，而不是把整张表从头扫一遍（<code>Seq Scan</code>）。表越大，这个差别越大。"),
+    ];
+
+    string presetKey = "devices";
+    string sql = Presets[0].Sql;
+    QueryResult? result;
+    string? error;
+    bool busy;
+
+    Preset Current => Presets.First(p => p.Key == presetKey);
+
+    /// <summary>换一条示例时，把它的 SQL 放进编辑框、清掉上一次的结果。</summary>
+    string PresetKey
+    {
+        get => presetKey;
+        set
+        {
+            presetKey = value;
+            sql = Current.Sql;
+            result = null;
+            error = null;
+        }
+    }
+
+    async Task Run()
+    {
+        busy = true;
+        error = null;
+        try { result = await Db.QueryReadOnlyAsync(sql); }
+        catch (Exception ex) when (ex is Npgsql.PostgresException or Npgsql.NpgsqlException)
+        {
+            result = null;
+            error = ex.Message;
+        }
+        busy = false;
+    }
+
+    async Task Seed()
+    {
+        busy = true;
+        var created = await Db.EnsureSampleReadingsAsync();
+        error = created ? null : "库里已经有采样数据了，不再重复生成。";
+        busy = false;
+        if (created) await Run();
+    }
+
+    // ---- 演示 2：SQL 注入 ----
+    string nameInput = "1 号反应釜";
+
+    void FillMalicious() => nameInput = "x' OR '1'='1";
+    int? concatRows;
+    int? paramRows;
+
+    string ConcatSql => $"SELECT id, name FROM t_device WHERE name = '{nameInput}'";
+
+    async Task Injection()
+    {
+        busy = true;
+        try
+        {
+            // 两条都在只读事务里执行：拼接版再危险，这里也只能读
+            concatRows = (await Db.QueryReadOnlyAsync(ConcatSql)).Rows.Count;
+            paramRows = (await Db.QueryReadOnlyAsync("SELECT id, name FROM t_device WHERE name = @name", new Dictionary<string, object?> { ["name"] = nameInput })).Rows.Count;
+        }
+        catch (Npgsql.PostgresException ex)
+        {
+            error = ex.Message;
+        }
+        busy = false;
+    }
+
+    const string InjectionCode = """
+        // 危险：值直接拼进 SQL 文本
+        var sql = $"SELECT id, name FROM t_device WHERE name = '{name}'";
+
+        // 安全：值通过参数传入，数据库当它是纯数据
+        command.CommandText = "SELECT id, name FROM t_device WHERE name = @name";
+        command.Parameters.AddWithValue("name", name);
+        """;
+
+    const string AdoCode = """
+        await using var connection = await dataSource.OpenConnectionAsync();
+        await using var command = new NpgsqlCommand(
+            "SELECT at, value FROM t_reading WHERE device_id = @id ORDER BY at DESC LIMIT 5", connection);
+        command.Parameters.AddWithValue("id", 1);
+
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            Console.WriteLine($"{reader.GetDateTime(0)}  {reader.GetDouble(1)}");
+        """;
+}

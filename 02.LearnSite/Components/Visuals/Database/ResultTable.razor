@@ -1,0 +1,42 @@
+@*
+    手写 SQL 的结果表：列是运行时才知道的，所以用基础的 Table 部件逐格画。
+*@
+@namespace LearnSite.Components.Visuals
+@using LearnSite.Data
+@inherits RuneComponent
+
+@if (Result is null)
+{
+    <Paragraph Tone="TextTone.Muted">（还没有结果，点“执行”）</Paragraph>
+}
+else
+{
+    <Flex Direction="LayoutDirection.Column" Gap="SpaceScale.Xs">
+        <Small Tone="TextTone.Muted">@Result.Rows.Count 行@(Result.Truncated ? "（只显示前几行）" : "") · @Result.Milliseconds.ToString("F1") 毫秒</Small>
+        <Table Density="TableDensity.Compact" Striped="true" aria-label="查询结果">
+            <TableHead>
+                <TableRow>
+                    @foreach (var column in Result.Columns)
+                    {
+                        <TableHeaderCell>@column</TableHeaderCell>
+                    }
+                </TableRow>
+            </TableHead>
+            <TableBody>
+                @foreach (var (row, r) in Result.Rows.Select((row, r) => (row, r)))
+                {
+                    <TableRow @key="r">
+                        @foreach (var cell in row)
+                        {
+                            <TableCell NoWrap="true">@cell</TableCell>
+                        }
+                    </TableRow>
+                }
+            </TableBody>
+        </Table>
+    </Flex>
+}
+
+@code {
+    [Parameter] public QueryResult? Result { get; set; }
+}

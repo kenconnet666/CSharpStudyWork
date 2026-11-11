@@ -1,0 +1,43 @@
+@*
+    数据库一课的"门"：先连库、建表；连不上就显示原因和启动命令（带重试），连上了才显示里面的演示。
+*@
+@namespace LearnSite.Components.Visuals
+@using LearnSite.Data
+@inherits RuneComponent
+@inject LearnDb Db
+
+@if (state == State.Ready)
+{
+    @ChildContent
+}
+else if (state == State.Failed)
+{
+    <Alert Tone="Tone.Danger" Icon="Lucide.DatabaseZap" Label="数据库没有连上">
+        <Flex Direction="LayoutDirection.Column" Gap="SpaceScale.Sm">
+            <span>@Db.Error</span>
+            <span>在 EasyQuerySharp 项目目录里启动：</span>
+            <CodeBlock Code="@LearnDb.StartCommand" Lang="bash" Copyable="true" />
+            <div><Button Icon="Lucide.RefreshCw" @onclick="Connect">重试</Button></div>
+        </Flex>
+    </Alert>
+}
+else
+{
+    <Paragraph Tone="TextTone.Muted">正在连接数据库…</Paragraph>
+}
+
+@code {
+    enum State { Connecting, Ready, Failed }
+
+    State state = State.Connecting;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    protected override async Task OnInitializedAsync() => await Connect();
+
+    async Task Connect()
+    {
+        state = State.Connecting;
+        state = await Db.EnsureReadyAsync() ? State.Ready : State.Failed;
+    }
+}
