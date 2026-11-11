@@ -1,0 +1,16 @@
+# 学习站用的设备仿真（在 WSL 的 Docker 里跑）：
+#   cd sim && docker compose up -d --build        （在 WSL 里；或在 Windows 里 wsl -d Debian --exec bash -c "cd /mnt/c/.../sim && docker compose up -d --build"）
+# Modbus TCP：localhost:5020，从站 1；西门子 S7：localhost:102，DB1，机架 0 槽 1
+services:
+  modbus:
+    build: .
+    image: learnsite-sim
+    command: python modbus_server.py
+    ports: ["5020:5020"]
+    restart: unless-stopped
+  s7:
+    build: .
+    image: learnsite-sim
+    command: python s7_server.py
+    ports: ["102:102"]
+    restart: unless-stopped

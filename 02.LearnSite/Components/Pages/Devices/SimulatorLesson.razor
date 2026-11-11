@@ -1,0 +1,362 @@
+@page "/simulators"
+@using System.Buffers.Binary
+@using System.Net.Sockets
+@using LearnSite.Services
+@implements IDisposable
+@inherits RuneComponent
+
+@*
+    对接设备：连 WSL Docker 里的仿真设备（sim/ 目录）。
+      Modbus TCP：pymodbus，localhost:5020，从站 1      西门子 S7：python-snap7 服务端，localhost:102，DB1
+    和前面学习站内存里的模拟设备不同，这两个是独立的"外部设备"：走真正的网络，用真正的客户端库（我们自己的 ModbusTcpClient、Sharp7）去连。
+*@
+
+<LessonPage Title="对接仿真设备：没有真 PLC 也能练真连接">
+    <Intro>
+        前面的演示都是学习站自己在内存里「扮演」设备。真实项目里，设备是网线另一头的<strong>独立的东西</strong>：地址、端口、协议细节都要对上。
+        没有真设备时，用<strong>仿真软件</strong>——它在你的电脑上（这里是 WSL 的 Docker 里）冒充一台设备，对外的行为和真设备几乎一样。
+        这一课用两个仿真设备练习：<strong>Modbus TCP</strong>（pymodbus）和<strong>西门子 S7</strong>（snap7 服务端）。上位机代码对着它们跑通，换成真设备只需要改地址。
+    </Intro>
+    <ChildContent>
+        <ConceptGuide>
+            <Concept Term="为什么用仿真" Analogy="驾校的模拟器：不用上路也能练换挡、倒车；出错也不会撞车。">
+                真设备难得、也怕你误写（把运行中的设备参数写坏）。仿真设备<strong>可以随便读写、随便断开重连、可以反复重启</strong>，开发阶段和写自动化测试时特别有用。
+            </Concept>
+            <Concept Term="仿真 ≠ 真设备" Analogy="模拟器再像，也和真车有区别：路感、故障、延迟都不一样。">
+                仿真设备只能验证<strong>协议层</strong>对不对（报文、字节序、地址）。真实设备还有：响应延迟、偶发丢包、固件的特殊行为、权限设置（S7 要开 PUT/GET）、寄存器地址偏移的坑。上线前一定要接真设备再测一遍。
+            </Concept>
+            <Concept Term="对接要对上的四件事" Analogy="打电话要对上：号码（地址）、分机（从站号）、语言（协议）、暗号（访问权限）。">
+                <strong>地址 + 端口</strong>（Modbus 常见 502，仿真用 5020；S7 固定 102）、<strong>从站号 / 机架槽号</strong>（Modbus 单元号；S7 机架 0 槽 1）、<strong>寄存器 / 数据块布局</strong>（读哪、什么类型）、<strong>字节序</strong>（都是大端）。
+            </Concept>
+        </ConceptGuide>
+
+        <Demo Title="第一步：启动仿真设备，检测连通性">
+            <Stage>
+                <Paragraph Tone="TextTone.Muted">仿真设备的文件在项目的 <Code>sim/</Code> 目录，用 Docker Compose 启动（首次会构建镜像，需要联网下载 Python 包）。在 WSL 里执行：</Paragraph>
+                <CodeBlock Code="@StartCode" Lang="bash" Copyable="true" />
+                <Flex Gap="SpaceScale.Sm" Wrap="true">
+                    <Button Icon="Lucide.Radar" @onclick="ProbeAll">检测两台设备</Button>
+                </Flex>
+            </Stage>
+            <Side>
+                <Grid MinItemWidth="CssLength.Rem(14)" Gap="SpaceScale.Sm">
+                    <Slot Name="Modbus TCP  127.0.0.1:5020" Data="@(modbusUp is null ? "未检测" : modbusUp == true ? "在线" : "没有响应")" Changed="@(modbusUp == true)" />
+                    <Slot Name="西门子 S7  127.0.0.1:102" Data="@(s7Up is null ? "未检测" : s7Up == true ? "在线" : "没有响应")" Changed="@(s7Up == true)" />
+                </Grid>
+                @if (modbusUp == false || s7Up == false)
+                {
+                    <Alert Tone="Tone.Warning" Icon="Lucide.TriangleExclamationPoint" Label="有设备没连上">
+                        还没启动？执行上面的命令。如果端口被占用（比如本机已经有程序占用了 102），可以在 <Code>sim/compose.yaml</Code> 里改映射端口。
+                    </Alert>
+                }
+            </Side>
+        </Demo>
+
+        <Demo Title="演示 1：Modbus TCP——连接、读寄存器、写寄存器">
+            <Stage>
+                <Flex Gap="SpaceScale.Sm" Wrap="true">
+                    <Button Icon="Lucide.Plug" Disabled="@mb.Connected" @onclick="MbConnect">连接</Button>
+                    <Button Variant="ButtonVariant.Soft" Tone="Tone.Neutral" Icon="Lucide.Unplug" Disabled="@(!mb.Connected)" @onclick="MbDisconnect">断开</Button>
+                    <Button Icon="Lucide.BookOpen" Disabled="@(!mb.Connected)" @onclick="@(() => MbRead(0, 6))">读 0~5 号寄存器</Button>
+                    <Button Variant="ButtonVariant.Soft" Tone="Tone.Danger" Icon="Lucide.OctagonExclamationPoint" Disabled="@(!mb.Connected)" @onclick="@(() => MbRead(200, 1))">故意读 200 号（越界）</Button>
+                </Flex>
+                <Switch @bind-Value="mbAuto" Disabled="@(!mb.Connected)">自动刷新（每秒读一次）</Switch>
+                <Field Label="@($"写入 10 号寄存器的值 {mbWriteValue}")"><Slider TValue="int" @bind-Value="mbWriteValue" Min="0" Max="5000" /></Field>
+                <Flex Gap="SpaceScale.Sm" Wrap="true">
+                    <Button Icon="Lucide.Pencil" Disabled="@(!mb.Connected)" @onclick="MbWrite">写入后读回来</Button>
+                </Flex>
+                @if (mbError is not null)
+                {
+                    <Alert Tone="Tone.Danger" Icon="Lucide.CircleX" Label="出错">@mbError</Alert>
+                }
+                <Grid MinItemWidth="CssLength.Rem(10)" Gap="SpaceScale.Sm">
+                    <Slot Name="温度（[0] ÷ 10）" Data="@MbTemperature" Changed="@(mbRegisters is not null)" />
+                    <Slot Name="压力 [1]" Data="@(mbRegisters is { Length: > 1 } ? mbRegisters[1].ToString() : "—")" />
+                    <Slot Name="状态字 [2]" Data="@(mbRegisters is { Length: > 2 } ? Convert.ToString(mbRegisters[2], 2).PadLeft(8, '0') : "—")" />
+                    <Slot Name="float（[3][4] 大端）" Data="@MbFloat" />
+                    <Slot Name="计数 [5]" Data="@(mbRegisters is { Length: > 5 } ? mbRegisters[5].ToString() : "—")" />
+                </Grid>
+            </Stage>
+            <Side>
+                @if (mbExchange is not null)
+                {
+                    <FrameView Title="请求（发出的字节）" Icon="Lucide.ArrowRight" Fields="mbExchange.RequestFields" />
+                    <FrameView Title="应答（仿真设备回的字节）" Icon="Lucide.ArrowLeft" Fields="mbExchange.ResponseFields" Highlight="true" />
+                }
+                <Narration @key="@($"{mbExchange?.GetHashCode()}{mbError}")" Mood="@(mbExchange?.Exception is not null || mbError is not null ? "🚨" : "💡")">
+                    @if (mbExchange?.Exception is not null)
+                    {
+                        <text>设备返回了异常应答：<strong>@mbExchange.Exception</strong>。注意应答的功能码变成了 <Code>83</Code>（03 + 0x80）。这和之前在内存里模拟时看到的一模一样——协议是同一个，只是这次对面是一台独立的设备。</text>
+                    }
+                    else if (mbExchange is not null)
+                    {
+                        <text>字节和「Modbus TCP」一课里完全一样：7 字节头 + 功能码 + 数据。你的上位机代码（<Code>ModbusTcpClient</Code>）没有区分对面是学习站里的模拟设备，还是 Docker 里的 pymodbus，更不区分是不是真设备。温度读数每 0.5 秒会变一次；写入 10 号寄存器后读回来还是你写的值，说明设备真的存住了。</text>
+                    }
+                    else
+                    {
+                        <text>先点「连接」，再读寄存器。打开自动刷新，看温度和计数每秒在变。</text>
+                    }
+                </Narration>
+                <CodeBlock Code="@MbCode" Lang="csharp" Copyable="false" />
+            </Side>
+        </Demo>
+
+        <Demo Title="演示 2：西门子 S7——用 Sharp7 读写数据块 DB1">
+            <Stage>
+                <Flex Gap="SpaceScale.Sm" Wrap="true">
+                    <Button Icon="Lucide.Plug" Disabled="@s7.Connected" @onclick="S7Connect">连接（机架 0、槽 1）</Button>
+                    <Button Variant="ButtonVariant.Soft" Tone="Tone.Neutral" Icon="Lucide.Unplug" Disabled="@(!s7.Connected)" @onclick="S7Disconnect">断开</Button>
+                    <Button Icon="Lucide.BookOpen" Disabled="@(!s7.Connected)" @onclick="S7Read">读 DB1 的前 16 字节</Button>
+                </Flex>
+                <Switch @bind-Value="s7Auto" Disabled="@(!s7.Connected)">自动刷新（每秒读一次）</Switch>
+                <Field Label="@($"写入 DBW14 的值 {s7WriteValue}")"><Slider TValue="int" @bind-Value="s7WriteValue" Min="-3000" Max="3000" /></Field>
+                <Flex Gap="SpaceScale.Sm" Wrap="true">
+                    <Button Icon="Lucide.Pencil" Disabled="@(!s7.Connected)" @onclick="S7Write">写入后读回来</Button>
+                </Flex>
+                @if (s7Error is not null)
+                {
+                    <Alert Tone="Tone.Danger" Icon="Lucide.CircleX" Label="出错">@s7Error</Alert>
+                }
+                <Grid MinItemWidth="CssLength.Rem(10)" Gap="SpaceScale.Sm">
+                    <Slot Name="DBW0 温度 ÷ 10" Data="@(s7Bytes is null ? "—" : (BinaryPrimitives.ReadInt16BigEndian(s7Bytes.AsSpan(0)) / 10.0).ToString("F1"))" Changed="@(s7Bytes is not null)" />
+                    <Slot Name="DBW2 压力" Data="@(s7Bytes is null ? "—" : BinaryPrimitives.ReadInt16BigEndian(s7Bytes.AsSpan(2)).ToString())" />
+                    <Slot Name="DBD4 Real" Data="@(s7Bytes is null ? "—" : BinaryPrimitives.ReadSingleBigEndian(s7Bytes.AsSpan(4)).ToString("F2"))" />
+                    <Slot Name="DBD8 计数 DInt" Data="@(s7Bytes is null ? "—" : BinaryPrimitives.ReadInt32BigEndian(s7Bytes.AsSpan(8)).ToString())" />
+                    <Slot Name="DBB12 状态" Data="@(s7Bytes is null ? "—" : Convert.ToString(s7Bytes[12], 2).PadLeft(8, '0'))" />
+                    <Slot Name="DBW14 你写入的值" Data="@(s7Bytes is null ? "—" : BinaryPrimitives.ReadInt16BigEndian(s7Bytes.AsSpan(14)).ToString())" Changed="@s7Written" />
+                </Grid>
+            </Stage>
+            <Side>
+                <IconLabel Icon="Lucide.Binary">读回来的原始字节（DB1 的前 16 字节）</IconLabel>
+                <CodeBlock Code="@(s7Bytes is null ? "（还没有读）" : ByteText.Hex(s7Bytes))" Lang="text" Copyable="false" />
+                <Narration Mood="🧭">
+                    这和「西门子 S7」一课里「地址翻译成字节、字节翻译成数值」是同一件事，只是这次字节来自一台真正通过网络回应的设备。
+                    <strong>注意 DBW0 和 DBD4</strong>：存的是同一个温度，一个放大 10 倍存成整数，一个是浮点数——类型是 PLC 程序和上位机双方的约定，字节本身不带类型。
+                </Narration>
+                <CodeBlock Code="@S7Code" Lang="csharp" Copyable="false" />
+            </Side>
+        </Demo>
+
+        <Prose Measure="false">
+            <H2>换成真实设备，要改哪些地方</H2>
+            <ul>
+                <li><strong>地址和端口</strong>：仿真是 <Code>127.0.0.1</Code>，真设备填它的 IP（PLC 的网络设置里查）。Modbus 真设备通常是 502。</li>
+                <li><strong>S7 要在 PLC 里放行</strong>：1200 / 1500 要勾选「允许来自远程对象的 PUT/GET 通信访问」，DB 取消「优化的块访问」。仿真设备没有这些限制，所以这一步容易被忽略。</li>
+                <li><strong>寄存器 / DB 布局以真设备手册为准</strong>：仿真里是我们自己定的，真设备的地址、类型、缩放系数要照手册。Modbus 手册里常见 40001 这种写法，对应发送的地址 0。</li>
+                <li><strong>多测几种异常</strong>：拔网线、PLC 重启、读写越界，看上位机的超时、重连、日志是否按预期工作（前面「轮询与断线重连」「采集落库」的内容）。</li>
+            </ul>
+            <H2>其他常见的仿真软件</H2>
+            <ul>
+                <li><strong>Modbus</strong>：ModbusPal、diagslave（命令行）、教程资料里的 Modbus Slave（需要 7-Zip 解压）。</li>
+                <li><strong>西门子</strong>：官方 PLCSIM（要装 TIA Portal，较重）、本课用的 snap7 服务端（轻量）。</li>
+                <li><strong>OPC UA</strong>：Prosys OPC UA Simulation Server、KepServer 的模拟驱动。</li>
+                <li><strong>串口</strong>：com0com、Virtual Serial Port Driver 虚拟一对串口，一端接上位机、一端接仿真设备。</li>
+            </ul>
+        </Prose>
+    </ChildContent>
+</LessonPage>
+
+@code {
+    const string StartCommand = "cd /mnt/c/Users/Administrator/RiderProjects/StudyWork/sim && docker compose up -d --build";
+    const string StartCode = $"{StartCommand}\n# 查看日志：docker compose logs -f\n# 停止：docker compose down";
+
+    // ---- 连通性检测 ----
+    bool? modbusUp;
+    bool? s7Up;
+
+    async Task ProbeAll()
+    {
+        modbusUp = await ProbeAsync(5020);
+        s7Up = await ProbeAsync(102);
+    }
+
+    static async Task<bool> ProbeAsync(int port)
+    {
+        using var client = new TcpClient();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(1));
+        try
+        {
+            await client.ConnectAsync("127.0.0.1", port, cts.Token);
+            return true;
+        }
+        catch (Exception ex) when (ex is OperationCanceledException or SocketException)
+        {
+            return false;
+        }
+    }
+
+    // ---- Modbus ----
+    readonly ModbusTcpClient mb = new("127.0.0.1", 5020);
+    ModbusExchange? mbExchange;
+    ushort[]? mbRegisters;
+    string? mbError;
+    int mbWriteValue = 1234;
+    bool mbAutoValue;
+    CancellationTokenSource? refreshCts;
+
+    bool mbAuto
+    {
+        get => mbAutoValue;
+        set { mbAutoValue = value; EnsureRefreshLoop(); }
+    }
+
+    string MbTemperature => mbRegisters is { Length: > 0 } ? $"{mbRegisters[0] / 10.0:F1} ℃" : "—";
+
+    string MbFloat => mbRegisters is { Length: > 4 }
+        ? BinaryPrimitives.ReadSingleBigEndian([(byte)(mbRegisters[3] >> 8), (byte)mbRegisters[3], (byte)(mbRegisters[4] >> 8), (byte)mbRegisters[4]]).ToString("F2")
+        : "—";
+
+    async Task MbConnect()
+    {
+        mbError = null;
+        try { await mb.ConnectAsync(); }
+        catch (Exception ex) when (ex is TimeoutException or SocketException or IOException) { mbError = $"连接失败：{ex.Message}。仿真设备启动了吗？"; }
+    }
+
+    void MbDisconnect()
+    {
+        mbAuto = false;
+        mb.Disconnect();
+    }
+
+    async Task MbRead(ushort address, ushort count)
+    {
+        mbError = null;
+        try
+        {
+            mbExchange = await mb.ReadHoldingAsync(address, count);
+            if (mbExchange.Registers is { } registers && address == 0) mbRegisters = registers;
+        }
+        catch (Exception ex) when (ex is TimeoutException or IOException or SocketException or InvalidOperationException)
+        {
+            mbError = ex.Message;
+            mbAutoValue = false;
+        }
+    }
+
+    async Task MbWrite()
+    {
+        mbError = null;
+        try
+        {
+            await mb.WriteSingleAsync(10, (ushort)mbWriteValue);
+            mbExchange = await mb.ReadHoldingAsync(10, 1);
+        }
+        catch (Exception ex) when (ex is TimeoutException or IOException or SocketException or InvalidOperationException)
+        {
+            mbError = ex.Message;
+        }
+    }
+
+    string MbCode => """
+        using var client = new ModbusTcpClient("127.0.0.1", 5020);   // 地址和端口，换真设备只改这里
+        await client.ConnectAsync();
+
+        var exchange = await client.ReadHoldingAsync(address: 0, count: 6);   // 功能码 03
+        ushort[] registers = exchange.Registers!;                              // 已按大端拆成 16 位整数
+        double temperature = registers[0] / 10.0;
+
+        await client.WriteSingleAsync(address: 10, value: 1234);               // 功能码 06
+        """;
+
+    // ---- S7 ----
+    readonly S7SimClient s7 = new();
+    byte[]? s7Bytes;
+    string? s7Error;
+    int s7WriteValue = 1500;
+    bool s7Written;
+    bool s7AutoValue;
+
+    bool s7Auto
+    {
+        get => s7AutoValue;
+        set { s7AutoValue = value; EnsureRefreshLoop(); }
+    }
+
+    async Task S7Connect()
+    {
+        s7Error = null;
+        try { await s7.ConnectAsync("127.0.0.1"); }
+        catch (IOException ex) { s7Error = ex.Message + "。仿真 PLC 启动了吗？"; }
+    }
+
+    void S7Disconnect()
+    {
+        s7Auto = false;
+        s7.Disconnect();
+    }
+
+    async Task S7Read()
+    {
+        s7Error = null;
+        try { s7Bytes = await s7.ReadDbAsync(1, 0, 16); }
+        catch (IOException ex)
+        {
+            s7Error = ex.Message;
+            s7AutoValue = false;
+        }
+    }
+
+    async Task S7Write()
+    {
+        s7Error = null;
+        try
+        {
+            var data = new byte[2];
+            BinaryPrimitives.WriteInt16BigEndian(data, (short)s7WriteValue);
+            await s7.WriteDbAsync(1, 14, data);
+            s7Bytes = await s7.ReadDbAsync(1, 0, 16);
+            s7Written = true;
+        }
+        catch (IOException ex) { s7Error = ex.Message; }
+    }
+
+    string S7Code => """
+        var client = new S7Client();
+        client.ConnectTo("127.0.0.1", rack: 0, slot: 1);          // 真 PLC：它的 IP，1200/1500 机架 0 槽 1
+
+        var buffer = new byte[16];
+        client.DBRead(1, 0, 16, buffer);                          // 读 DB1 从字节 0 开始的 16 个字节
+        double temperature = S7.GetIntAt(buffer, 0) / 10.0;       // DBW0
+        float real = S7.GetRealAt(buffer, 4);                     // DBD4
+
+        S7.SetIntAt(buffer, 14, 1500);
+        client.DBWrite(1, 14, 2, buffer[14..16]);                 // 写 DBW14
+        """;
+
+    // ---- 自动刷新：一个后台循环，每秒读一次打开了自动刷新的那台 ----
+    void EnsureRefreshLoop()
+    {
+        if (!(mbAutoValue || s7AutoValue))
+        {
+            refreshCts?.Cancel();
+            refreshCts = null;
+            return;
+        }
+        if (refreshCts is not null) return;
+        refreshCts = new CancellationTokenSource();
+        _ = RefreshLoop(refreshCts.Token);
+    }
+
+    async Task RefreshLoop(CancellationToken token)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(token))
+            {
+                if (mbAutoValue) await MbRead(0, 6);
+                if (s7AutoValue) await S7Read();
+                StateHasChanged();
+            }
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    public void Dispose()
+    {
+        refreshCts?.Cancel();
+        mb.Dispose();
+        s7.Dispose();
+    }
+}

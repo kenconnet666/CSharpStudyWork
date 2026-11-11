@@ -63,6 +63,7 @@
 - `02.LearnSite`：桌面应用（界面、数据库、采集管线）。
 - `02.LearnSite.Core`：不依赖界面和数据库的纯逻辑（Modbus 编解码、模拟设备、报警判断）。
 - `02.LearnSite.Tests`：xUnit 单元测试，只测 Core。运行：`dotnet test --project 02.LearnSite.Tests`。
+- `sim/`：Modbus 和西门子 S7 的 Docker 仿真设备（见 `sim/README.md`）。
 - 日志写在用户目录的 `.learnsite\logs`（按天滚动，保留 7 天）。
 
 ## 数据库课程（「数据库」与「综合实战」）

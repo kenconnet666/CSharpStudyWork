@@ -1,4 +1,3 @@
-using System.Buffers.Binary;
 using System.Net.Sockets;
 
 namespace LearnSite.Services;
@@ -20,7 +19,7 @@ public sealed class ModbusLoopback : LoopbackServer
 
     protected override async Task ServeAsync(NetworkStream stream, CancellationToken token)
     {
-        while (await ReadFrameAsync(stream, token) is { } request)
+        while (await ModbusFraming.ReadFrameAsync(stream, token) is { } request)
             if (!Silent) await stream.WriteAsync(Device.Handle(request), token);
     }
 
@@ -30,29 +29,6 @@ public sealed class ModbusLoopback : LoopbackServer
         var stream = ClientStream;
         await stream.WriteAsync(request);
         using var cts = new CancellationTokenSource(timeout ?? TimeSpan.FromSeconds(2));
-        return await ReadFrameAsync(stream, cts.Token) ?? throw new IOException("对方关闭了连接");
-    }
-
-    /// <summary>读一整帧：先 7 字节头，再按头里的长度字段读剩余字节。对方关闭连接返回 null。</summary>
-    static async Task<byte[]?> ReadFrameAsync(NetworkStream stream, CancellationToken token)
-    {
-        var header = new byte[7];
-        if (!await ReadExactAsync(stream, header, token)) return null;
-        var rest = BinaryPrimitives.ReadUInt16BigEndian(header.AsSpan(4)) - 1;   // 长度里已包含单元号这 1 字节
-        var frame = new byte[7 + rest];
-        header.CopyTo(frame, 0);
-        return await ReadExactAsync(stream, frame.AsMemory(7), token) ? frame : null;
-    }
-
-    static async Task<bool> ReadExactAsync(NetworkStream stream, Memory<byte> buffer, CancellationToken token)
-    {
-        var filled = 0;
-        while (filled < buffer.Length)
-        {
-            var count = await stream.ReadAsync(buffer[filled..], token);
-            if (count == 0) return false;
-            filled += count;
-        }
-        return true;
+        return await ModbusFraming.ReadFrameAsync(stream, cts.Token) ?? throw new IOException("对方关闭了连接");
     }
 }
